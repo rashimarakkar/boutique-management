@@ -27,7 +27,7 @@ export default function Home() {
   };
   return <main>
     <header><div className="brand-lockup"><img src="/hamiz-logo.png" alt="Hamiz Boutique" /><div></div></div><button className="profile">Owner</button></header>
-    <section className="hero"><div><p className="eyebrow">TODAY&apos;S OVERVIEW</p><h2>Your orders, beautifully in hand.</h2><p>Keep every client, fit, design reference and deadline together.</p></div><span className="date">{new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span></section>
+    <section className="hero"><div><p className="eyebrow">TODAY&apos;S OVERVIEW</p><h2>Hamiz Boutique</h2><p> Curated styles for every woman.</p></div><span className="date">{new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span></section>
     <section className="metrics">
       <Metric label="Pending work" value={summary?.pending} tone="sand" href="/orders?view=pending" />
       <Metric label="Due today" value={summary?.dueToday} tone="rose" href="/orders?view=due_today" />
