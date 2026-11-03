@@ -26,7 +26,7 @@ export default function Home() {
     finally { setSaving(false); }
   };
   return <main>
-    <header><div className="brand-lockup"><img src="/hamiz-logo.png" alt="Hamiz Boutique" /><div><p className="eyebrow">PRIVATE BOUTIQUE WORKSPACE</p><h1>Hamiz Boutique</h1></div></div><button className="profile">Owner</button></header>
+    <header><div className="brand-lockup"><img src="/hamiz-logo.png" alt="Hamiz Boutique" /><div></div></div><button className="profile">Owner</button></header>
     <section className="hero"><div><p className="eyebrow">TODAY&apos;S OVERVIEW</p><h2>Your orders, beautifully in hand.</h2><p>Keep every client, fit, design reference and deadline together.</p></div><span className="date">{new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span></section>
     <section className="metrics">
       <Metric label="Pending work" value={summary?.pending} tone="sand" href="/orders?view=pending" />
