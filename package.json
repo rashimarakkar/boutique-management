@@ -1,0 +1,14 @@
+{
+  "name": "boutique-manager",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w @boutique/api",
+    "dev:web": "npm run dev -w @boutique/web",
+    "build": "npm run build -w @boutique/api && npm run build -w @boutique/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
