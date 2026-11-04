@@ -16,7 +16,7 @@ type AuthenticatedRequest = { user: AuthUser };
 type CookieOptions = {
   httpOnly: boolean;
   secure: boolean;
-  sameSite: 'lax';
+  sameSite: 'lax' | 'strict' | 'none';
   maxAge?: number;
   path: string;
 };
@@ -27,12 +27,28 @@ type CookieResponse = {
 
 const COOKIE_NAME = 'auth_token';
 const COOKIE_LIFETIME_MS = 8 * 60 * 60 * 1000;
-const cookieOptions = (): CookieOptions => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  path: '/',
-});
+const cookieOptions = (): CookieOptions => {
+  const configuredSameSite = process.env.COOKIE_SAME_SITE;
+  const sameSite =
+    configuredSameSite === 'lax' ||
+    configuredSameSite === 'strict' ||
+    configuredSameSite === 'none'
+      ? configuredSameSite
+      : process.env.NODE_ENV === 'production'
+        ? 'none'
+        : 'lax';
+
+  if (configuredSameSite && !['lax', 'strict', 'none'].includes(configuredSameSite)) {
+    throw new Error('COOKIE_SAME_SITE must be lax, strict, or none');
+  }
+
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' || sameSite === 'none',
+    sameSite,
+    path: '/',
+  };
+};
 
 @Controller('auth')
 export class AuthController {
@@ -55,7 +71,6 @@ export class AuthController {
       throw new BadRequestException('Content-Type must be application/json');
     }
     return this.auth.bootstrapAdmin(dto).then(async (user) => {
-      
       const login = await this.auth.login(dto);
       response.cookie(COOKIE_NAME, login.token, {
         ...cookieOptions(),
