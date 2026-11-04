@@ -6,4 +6,5 @@ node_modules/
 dist/
 build/
 coverage/
+apps/api/uploads/
 .DS_Store

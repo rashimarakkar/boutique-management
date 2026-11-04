@@ -58,14 +58,14 @@
   align-items: center;
   justify-content: center;
   gap: 9px;
+  border: 0;
   background: #343930;
   color: #fff;
-  text-decoration: none;
   padding: 13px 19px;
   border-radius: 9px;
-  font-size: 14px;
-  font-weight: 600;
+  font: 600 14px 'DM Sans', sans-serif;
   white-space: nowrap;
+  cursor: pointer;
   transition: background 0.2s, transform 0.2s;
 }
 
@@ -400,8 +400,46 @@
 .footerNote {
   color: #968c80;
   font-size: 12px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-top: 15px;
-  text-align: right;
+}
+
+.pageSize {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #82796f;
+  font-size: 12px;
+}
+
+.pageSize select,
+.pageButtons button {
+  border: 1px solid #ddd4c9;
+  border-radius: 7px;
+  background: #fff;
+  color: #554e45;
+  padding: 7px 10px;
+  font: 500 12px 'DM Sans', sans-serif;
+}
+
+.pageButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.pageButtons button {
+  cursor: pointer;
+}
+
+.pageButtons button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Tablet */
@@ -510,6 +548,12 @@
 
   .footerNote {
     font-size: 11px;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
   }
 }
 

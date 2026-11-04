@@ -1,16 +1,72 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { Order, OrderDocument } from './order.schema';
 import { Client, ClientDocument } from '../clients/client.schema';
 import { OrderStatus } from './order.schema';
+import { ListOrdersQueryDto } from './list-orders-query.dto';
+import { GarmentType, GarmentTypeDocument } from './garment-type.schema';
+import { OrderMediaStorage } from './order-media.storage';
 
 @Injectable()
 export class OrdersService {
-  constructor(@InjectModel(Order.name) private readonly model: Model<OrderDocument>, @InjectModel(Client.name) private readonly clients: Model<ClientDocument>) {}
-  create(dto: CreateOrderDto) { return this.model.create(dto); }
-  async findAll(status?: string, view?: string, query?: string) {
+  constructor(
+    @InjectModel(Order.name) private readonly model: Model<OrderDocument>,
+    @InjectModel(Client.name) private readonly clients: Model<ClientDocument>,
+    @InjectModel(GarmentType.name) private readonly garmentTypes: Model<GarmentTypeDocument>,
+    private readonly mediaStorage: OrderMediaStorage,
+  ) {}
+  async create(dto: CreateOrderDto) {
+    const order = new this.model(dto);
+    const media = await this.mediaStorage.persistOrderMedia(
+      order._id.toString(),
+      dto.imageUrls ?? [],
+      dto.sketchUrl,
+    );
+    order.imageUrls = media.imageUrls;
+    if (media.sketchUrl !== undefined && media.sketchUrl !== null) {
+      order.sketchUrl = media.sketchUrl;
+    }
+    try {
+      return await order.save();
+    } catch (error) {
+      await this.mediaStorage.removeFiles(media.createdFiles);
+      throw error;
+    }
+  }
+  async findGarmentTypes() {
+    const [orderTypes, savedTypes] = await Promise.all([
+      this.model.distinct('garmentType').exec(),
+      this.garmentTypes.find().sort({ name: 1 }).lean(),
+    ]);
+    return [...new Set([...orderTypes, ...savedTypes.map((type) => type.name)].filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+  }
+  async createGarmentType(name: string) {
+    const normalizedName = name.trim().toLowerCase();
+    if (!normalizedName) throw new BadRequestException('Garment type cannot be empty');
+    try {
+      const type = await this.garmentTypes.create({
+        name: name.trim(),
+        normalizedName,
+      });
+      return { name: type.name };
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 11000
+      ) {
+        const existing = await this.garmentTypes.findOne({ normalizedName }).lean();
+        return { name: existing?.name ?? name.trim() };
+      }
+      throw error;
+    }
+  }
+  async findAll(query: ListOrdersQueryDto) {
+    const { status, view, q, skip = 0, limit = 20 } = query;
     const now = new Date();
     const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
     const active = { $nin: [OrderStatus.DELIVERED, OrderStatus.CANCELLED] };
@@ -23,24 +79,77 @@ export class OrdersService {
       if (view === 'payment_due') filter.$expr = { $gt: [{ $subtract: [{ $ifNull: ['$totalAmount', 0] }, { $ifNull: ['$advancePaid', 0] }] }, 0] };
       if (view === 'received') filter.advancePaid = { $gt: 0 };
     }
-    if (query?.trim()) {
-      const term = query.trim(); const match = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    if (q?.trim()) {
+      const term = q.trim(); const match = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       const clientMatches = await this.clients.find({ $or: [{ name: match }, { phone: match }] }, { _id: 1 }).lean();
       const options: Record<string, unknown>[] = [{ garmentType: match }];
       if (Types.ObjectId.isValid(term)) options.push({ _id: new Types.ObjectId(term) });
       if (clientMatches.length) options.push({ clientId: { $in: clientMatches.map(client => client._id) } });
       filter.$and = [...((filter.$and as Record<string, unknown>[]) ?? []), { $or: options }];
     }
-    return this.model.find(filter).populate('clientId', 'name phone').sort({ deliveryDate: 1 }).lean();
+    const [data, total] = await Promise.all([
+      this.model.find(filter).populate('clientId', 'name phone')
+        .sort({ deliveryDate: 1, _id: 1 }).skip(skip).limit(limit).lean(),
+      this.model.countDocuments(filter),
+    ]);
+    return { data, total, skip, limit };
   }
   async findOne(id: string) {
-    const order = await this.model.findById(id).populate('clientId', 'name phone email address notes').lean();
+    const order = await this.model.findById(id).exec();
     if (!order) throw new NotFoundException('Order not found');
-    return order;
+    const media = await this.mediaStorage.persistOrderMedia(
+      order._id.toString(),
+      order.imageUrls ?? [],
+      order.sketchUrl,
+    );
+    const mediaChanged =
+      JSON.stringify(order.imageUrls ?? []) !== JSON.stringify(media.imageUrls) ||
+      order.sketchUrl !== media.sketchUrl;
+    if (mediaChanged) {
+      await this.model.findByIdAndUpdate(order._id, {
+        imageUrls: media.imageUrls,
+        sketchUrl: media.sketchUrl,
+      }).exec();
+      await this.mediaStorage.removeUnreferencedFiles(order._id.toString(), [
+        ...media.imageUrls,
+        ...(media.sketchUrl ? [media.sketchUrl] : []),
+      ]);
+    }
+    return this.model.findById(id)
+      .populate('clientId', 'name phone email address notes')
+      .lean();
   }
   async update(id: string, dto: UpdateOrderDto) {
-    const order = await this.model.findByIdAndUpdate(id, dto, { new: true, runValidators: true });
-    if (!order) throw new NotFoundException('Order not found');
+    const existing = await this.model.findById(id).exec();
+    if (!existing) throw new NotFoundException('Order not found');
+    const media = await this.mediaStorage.persistOrderMedia(
+      existing._id.toString(),
+      dto.imageUrls ?? existing.imageUrls ?? [],
+      dto.sketchUrl === undefined ? existing.sketchUrl : dto.sketchUrl,
+    );
+    const order = await this.model.findByIdAndUpdate(
+      id,
+      { ...dto, imageUrls: media.imageUrls, sketchUrl: media.sketchUrl },
+      { new: true, runValidators: true },
+    );
+    if (!order) {
+      await this.mediaStorage.removeFiles(media.createdFiles);
+      throw new NotFoundException('Order not found');
+    }
+    await this.mediaStorage.removeUnreferencedFiles(order._id.toString(), [
+      ...media.imageUrls,
+      ...(media.sketchUrl ? [media.sketchUrl] : []),
+    ]);
     return order;
+  }
+
+  async getMedia(orderId: string, fileName: string) {
+    const order = await this.model.findById(orderId).select('imageUrls sketchUrl').lean();
+    if (!order) throw new NotFoundException('Media not found');
+    const mediaPath = `/api/orders/${orderId}/media/${fileName}`;
+    if (!order.imageUrls?.includes(mediaPath) && order.sketchUrl !== mediaPath) {
+      throw new NotFoundException('Media not found');
+    }
+    return this.mediaStorage.readMedia(orderId, fileName);
   }
 }

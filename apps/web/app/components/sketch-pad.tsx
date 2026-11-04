@@ -27,6 +27,7 @@ export function SketchPad({ initialSketch, onChange }: SketchPadProps) {
     clearCanvas();
     if (!initialSketch) return;
     const image = new Image();
+    image.crossOrigin = 'use-credentials';
     image.onload = () => ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     image.src = initialSketch;
   }, [initialSketch]);

@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { SketchPad } from '../../components/sketch-pad';
+import { API, apiFetch } from '../../lib/api';
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 const statuses = [
   ['new', 'New order'], ['measurements_pending', 'Measurements pending'], ['designing', 'Designing'],
   ['stitching', 'Stitching'], ['ready', 'Ready for delivery'], ['delivered', 'Delivered'], ['cancelled', 'Cancelled'],
@@ -13,9 +13,13 @@ type Measurement = { label: string; value: string; unit?: string };
 type Order = {
   _id: string; garmentType: string; description?: string; deliveryDate: string; givenDate?: string; status: string;
   totalAmount?: number; advancePaid?: number; notes?: string; referenceLinks?: string[]; imageUrls?: string[]; sketchUrl?: string;
-  measurements?: Measurement[]; clientId: { name: string; phone: string; email?: string; address?: string; notes?: string };
+  measurements?: Measurement[]; clientId: { _id: string; name: string; phone: string; email?: string; address?: string; notes?: string };
 };
 const dateValue = (date?: string) => date ? new Date(date).toISOString().slice(0, 10) : '';
+const mediaUrl = (value?: string) => {
+  if (!value || value.startsWith('data:') || /^https?:\/\//i.test(value)) return value ?? '';
+  return `${API.replace(/\/api\/?$/, '')}${value}`;
+};
 
 export default function OrderWorkspace() {
   const params = useParams<{ id: string }>();
@@ -26,7 +30,7 @@ export default function OrderWorkspace() {
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const load = async () => {
-    const response = await fetch(`${API}/orders/${params.id}`, { cache: 'no-store' });
+    const response = await apiFetch(`${API}/orders/${params.id}`, { cache: 'no-store' });
     if (response.ok) { const data = await response.json(); setOrder(data); setDraft(data); }
     else setNotice('This order could not be found.');
   };
@@ -36,11 +40,11 @@ export default function OrderWorkspace() {
     const payload = {
       garmentType: draft.garmentType, description: draft.description, givenDate: draft.givenDate || undefined,
       deliveryDate: draft.deliveryDate, status: draft.status, measurements: draft.measurements ?? [],
-      referenceLinks: draft.referenceLinks ?? [], imageUrls: draft.imageUrls ?? [], sketchUrl: draft.sketchUrl, notes: draft.notes,
+      referenceLinks: draft.referenceLinks ?? [], imageUrls: draft.imageUrls ?? [], sketchUrl: draft.sketchUrl ?? null, notes: draft.notes,
       ...(draft.totalAmount !== undefined ? { totalAmount: Number(draft.totalAmount) } : {}),
       ...(draft.advancePaid !== undefined ? { advancePaid: Number(draft.advancePaid) } : {}),
     };
-    const response = await fetch(`${API}/orders/${params.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const response = await apiFetch(`${API}/orders/${params.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (response.ok) { setNotice('Changes saved.'); await load(); } else setNotice('Could not save the changes. Please check the fields.');
     setSaving(false);
   };
@@ -82,13 +86,13 @@ export default function OrderWorkspace() {
   const balance = (Number(draft.totalAmount) || 0) - (Number(draft.advancePaid) || 0);
   return <main className="order-page">
     <Link className="back" href="/">← Back to dashboard</Link>
-    <header className="order-header"><div><p className="eyebrow">ORDER WORKSPACE</p><h1>{draft.clientId.name}</h1><p>{draft.clientId.phone} · {draft.garmentType}</p></div><label className="status-label">WORK STATUS<select value={draft.status} onChange={e => update('status', e.target.value)}>{statuses.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></header>
+    <header className="order-header"><div><p className="eyebrow">ORDER WORKSPACE</p><h1>{draft.clientId.name}</h1><p><Link href={`/clients/${draft.clientId._id}`}>{draft.clientId.phone} · View client history</Link> · {draft.garmentType}</p></div><label className="status-label">WORK STATUS<select value={draft.status} onChange={e => update('status', e.target.value)}>{statuses.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label></header>
     <form onSubmit={save} className="workspace-grid">
       <section className="workspace-card details"><h2>Order details</h2><div className="two-col"><label>Garment type<input required value={draft.garmentType} onChange={e => update('garmentType', e.target.value)} /></label><label>Delivery date<input required type="date" value={dateValue(draft.deliveryDate)} onChange={e => update('deliveryDate', e.target.value)} /></label><label>Given date<input type="date" value={dateValue(draft.givenDate)} onChange={e => update('givenDate', e.target.value)} /></label><label>Order total (₹)<input type="number" min="0" value={draft.totalAmount ?? ''} onChange={e => update('totalAmount', e.target.value === '' ? undefined : Number(e.target.value))} /></label><label>Amount received (₹)<input type="number" min="0" value={draft.advancePaid ?? ''} onChange={e => update('advancePaid', e.target.value === '' ? undefined : Number(e.target.value))} /></label><div className="balance"><span>Balance</span><strong>₹{balance.toLocaleString('en-IN')}</strong></div></div><label>Description / design notes<textarea value={draft.description ?? ''} onChange={e => update('description', e.target.value)} placeholder="Fabric, colour, pattern, embroidery, fitting notes…" /></label><label>Internal notes<textarea value={draft.notes ?? ''} onChange={e => update('notes', e.target.value)} placeholder="Anything only the boutique needs to remember" /></label></section>
       <section className="workspace-card"><h2>Measurements</h2><p className="hint">Measurements belong to this order, so past fitting details stay safe.</p><div className="measurements">{(draft.measurements ?? []).length === 0 && <p className="empty">No measurements added yet.</p>}{(draft.measurements ?? []).map((item, index) => <div className="measurement" key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.value} {item.unit}</strong><button type="button" aria-label={`Remove ${item.label}`} onClick={() => update('measurements', draft.measurements?.filter((_, i) => i !== index))}>×</button></div>)}</div><div className="measure-entry"><input value={newMeasurement.label} placeholder="e.g. Bust" onChange={e => setNewMeasurement({ ...newMeasurement, label: e.target.value })} /><input value={newMeasurement.value} placeholder="Value" onChange={e => setNewMeasurement({ ...newMeasurement, value: e.target.value })} /><button type="button" onClick={addMeasurement}>Add</button></div></section>
       <section className="workspace-card"><h2>Reference links</h2><p className="hint">Paste Pinterest, Instagram, Google Drive, or any image link shared by the client.</p><div className="links">{(draft.referenceLinks ?? []).map((link, index) => <div className="reference" key={link + index}><a href={link} target="_blank" rel="noreferrer">{link}</a><button type="button" aria-label="Remove reference" onClick={() => update('referenceLinks', draft.referenceLinks?.filter((_, i) => i !== index))}>×</button></div>)}</div><div className="link-entry"><input type="url" value={reference} placeholder="https://…" onChange={e => setReference(e.target.value)} /><button type="button" onClick={addReference}>Add link</button></div></section>
-      <section className="workspace-card media-card"><h2>Reference photos</h2><p className="hint">Add up to four photos shared by the client. Photos are resized before saving, so they stay practical for this private app.</p><div className="photo-grid">{(draft.imageUrls ?? []).map((image, index) => <figure key={image.slice(-30) + index}><img src={image} alt={`Client reference ${index + 1}`} /><button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => update('imageUrls', draft.imageUrls?.filter((_, i) => i !== index))}>×</button></figure>)}<label className="upload-photo"><input type="file" accept="image/*" multiple onChange={event => { attachPhotos(event.target.files); event.currentTarget.value = ''; }} /><span>＋</span><strong>Add photos</strong><small>{draft.imageUrls?.length ?? 0}/4</small></label></div></section>
-      <section className="workspace-card sketch-card"><h2>Model sketch</h2><p className="hint">Draw the garment model, style lines, or placement notes. Use a mouse, finger, or stylus.</p><SketchPad initialSketch={draft.sketchUrl} onChange={sketchUrl => update('sketchUrl', sketchUrl)} /></section>
+      <section className="workspace-card media-card"><h2>Reference photos</h2><p className="hint">Add up to four photos shared by the client. Photos are resized before saving and stored as files in the API uploads folder.</p><div className="photo-grid">{(draft.imageUrls ?? []).map((image, index) => <figure key={image.slice(-30) + index}><img src={mediaUrl(image)} crossOrigin="use-credentials" alt={`Client reference ${index + 1}`} /><button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => update('imageUrls', draft.imageUrls?.filter((_, i) => i !== index))}>×</button></figure>)}<label className="upload-photo"><input type="file" accept="image/*" multiple onChange={event => { attachPhotos(event.target.files); event.currentTarget.value = ''; }} /><span>＋</span><strong>Add photos</strong><small>{draft.imageUrls?.length ?? 0}/4</small></label></div></section>
+      <section className="workspace-card sketch-card"><h2>Model sketch</h2><p className="hint">Draw the garment model, style lines, or placement notes. Use a mouse, finger, or stylus.</p><SketchPad initialSketch={mediaUrl(draft.sketchUrl)} onChange={sketchUrl => update('sketchUrl', sketchUrl)} /></section>
       <footer className="save-bar"><p>{notice}</p><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save order'}</button></footer>
     </form>
     <style jsx>{`

@@ -31,7 +31,7 @@ export class UpdateOrderDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => MeasurementDto) measurements?: MeasurementDto[];
   @IsOptional() @IsArray() @IsString({ each: true }) referenceLinks?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(4) @IsString({ each: true }) @MaxLength(1500000, { each: true }) imageUrls?: string[];
-  @IsOptional() @IsString() @MaxLength(1500000) sketchUrl?: string;
+  @IsOptional() @IsString() @MaxLength(1500000) sketchUrl?: string | null;
   @IsOptional() @IsNumber() @Min(0) totalAmount?: number;
   @IsOptional() @IsNumber() @Min(0) advancePaid?: number;
   @IsOptional() @IsString() notes?: string;

@@ -3,9 +3,8 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import styles from './orders.module.css';
-
-const API =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+import { API, apiFetch } from '../lib/api';
+import { NewOrderDialog } from '../components/new-order-dialog';
 
 const filters = [
   ['all', 'All orders'],
@@ -29,6 +28,14 @@ type Order = {
     phone: string;
   };
 };
+type OrderPage = {
+  data: Order[];
+  total: number;
+  skip: number;
+  limit: number;
+};
+
+const PAGE_SIZES = [10, 20, 50];
 
 const labelForStatus = (status: string) =>
   status.replaceAll('_', ' ');
@@ -38,7 +45,11 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [skip, setSkip] = useState(0);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     const requestedView = new URLSearchParams(
@@ -53,29 +64,39 @@ export default function OrdersPage() {
 
     if (view !== 'all') params.set('view', view);
     if (submittedSearch) params.set('q', submittedSearch);
+    params.set('skip', String(skip));
+    params.set('limit', String(limit));
 
     setOrders(null);
     setError('');
+    const controller = new AbortController();
 
-    fetch(`${API}/orders?${params.toString()}`, {
+    apiFetch(`${API}/orders?${params.toString()}`, {
       cache: 'no-store',
+      signal: controller.signal,
     })
       .then(async (response) => {
         if (!response.ok) throw new Error();
 
-        setOrders(await response.json());
+        const page = (await response.json()) as OrderPage;
+        setOrders(page.data);
+        setTotal(page.total);
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
+        if (cause instanceof Error && cause.name === 'AbortError') return;
         setOrders([]);
+        setTotal(0);
         setError(
           'Orders could not be loaded. Check that the API is running.'
         );
       });
-  }, [view, submittedSearch]);
+    return () => controller.abort();
+  }, [view, submittedSearch, skip, limit, refreshVersion]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setSubmittedSearch(search.trim());
+    setSkip(0);
   };
 
   const formatDate = (date: string) =>
@@ -101,9 +122,11 @@ export default function OrdersPage() {
           </p>
         </div>
 
-        <Link href="/" className={styles.newOrder}>
-          <span>+</span> New order
-        </Link>
+        <NewOrderDialog
+          label="+ New order"
+          className={styles.newOrder}
+          onCreated={() => setRefreshVersion((version) => version + 1)}
+        />
       </header>
 
       {/* Search and Filters */}
@@ -131,7 +154,10 @@ export default function OrdersPage() {
               className={`${styles.filterButton} ${
                 view === value ? styles.activeFilter : ''
               }`}
-              onClick={() => setView(value)}
+              onClick={() => {
+                setView(value);
+                setSkip(0);
+              }}
             >
               {label}
             </button>
@@ -253,9 +279,43 @@ export default function OrdersPage() {
         )}
       </section>
 
-      <p className={styles.footerNote}>
-        Showing {orders?.length ?? 0} orders
-      </p>
+      <div className={styles.pagination}>
+        <label className={styles.pageSize}>
+          Orders per page
+          <select
+            value={limit}
+            onChange={(event) => {
+              setLimit(Number(event.target.value));
+              setSkip(0);
+            }}
+          >
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </label>
+        <span className={styles.footerNote}>
+          {total === 0
+            ? 'Showing 0 orders'
+            : `Showing ${skip + 1}–${Math.min(skip + limit, total)} of ${total} orders`}
+        </span>
+        <div className={styles.pageButtons}>
+          <button
+            type="button"
+            disabled={skip === 0 || orders === null}
+            onClick={() => setSkip(Math.max(0, skip - limit))}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={orders === null || skip + limit >= total}
+            onClick={() => setSkip(skip + limit)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </main>
   );
 }
