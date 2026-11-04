@@ -187,9 +187,11 @@ export default function OrdersPage() {
             <p>
               There are no orders matching your search or filter.
             </p>
-            <Link href="/" className={styles.emptyLink}>
-              Create your first order
-            </Link>
+            <NewOrderDialog
+              label="Create your first order"
+              className={styles.emptyLink}
+              onCreated={() => setRefreshVersion((version) => version + 1)}
+            />
           </div>
         ) : (
           <div className={styles.orderList}>

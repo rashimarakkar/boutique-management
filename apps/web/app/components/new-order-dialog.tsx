@@ -7,6 +7,7 @@ type Client = { _id: string; name: string; phone: string };
 type NewOrderDialogProps = {
   label: string;
   className: string;
+  initialClient?: Client;
   onCreated?: () => void;
 };
 
@@ -16,6 +17,7 @@ const blankClient = { name: '', phone: '' };
 export function NewOrderDialog({
   label,
   className,
+  initialClient,
   onCreated,
 }: NewOrderDialogProps) {
   const [open, setOpen] = useState(false);
@@ -34,6 +36,9 @@ export function NewOrderDialog({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState('');
+  const clientOptions = initialClient && !clients.some((client) => client._id === initialClient._id)
+    ? [initialClient, ...clients]
+    : clients;
   const firstInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const savingRef = useRef(saving);
@@ -212,6 +217,11 @@ export function NewOrderDialog({
         onClick={() => {
           setSuccess('');
           setMessage('');
+          if (initialClient) {
+            setClientMode('existing');
+            setClientQuery('');
+            setSelectedClientId(initialClient._id);
+          }
           setOpen(true);
         }}
       >
@@ -279,7 +289,7 @@ export function NewOrderDialog({
                       <option value="">
                         {clientsLoading ? 'Loading clients…' : clientError ? 'Could not load clients' : clients.length ? 'Select a client' : 'No matching clients'}
                       </option>
-                      {clients.map((client) => (
+                      {clientOptions.map((client) => (
                         <option value={client._id} key={client._id}>{client.name} · {client.phone}</option>
                       ))}
                     </select>

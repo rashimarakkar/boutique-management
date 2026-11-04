@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { NewOrderDialog } from '../../components/new-order-dialog';
 import { API, apiFetch } from '../../lib/api';
 import styles from '../clients.module.css';
 
@@ -40,6 +41,7 @@ export default function ClientDetailsPage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<ClientSummary | null>(null);
   const [error, setError] = useState('');
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,7 +58,7 @@ export default function ClientDetailsPage() {
         setError(cause instanceof Error ? cause.message : 'Client details could not be loaded.');
       });
     return () => controller.abort();
-  }, [params.id]);
+  }, [params.id, refreshVersion]);
 
   if (error) {
     return <main className={styles.page}><Link href="/clients" className={styles.back}>← Clients</Link><p className={styles.state}>{error}</p></main>;
@@ -75,7 +77,12 @@ export default function ClientDetailsPage() {
             {client.phone}{client.email ? ` · ${client.email}` : ''}
           </p>
         </div>
-        <Link href="/" className={styles.newOrder}>+ New order</Link>
+        <NewOrderDialog
+          label="+ New order"
+          className={styles.newOrder}
+          initialClient={client}
+          onCreated={() => setRefreshVersion((version) => version + 1)}
+        />
       </header>
 
       <section className={styles.metrics}>

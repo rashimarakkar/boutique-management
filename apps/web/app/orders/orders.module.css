@@ -391,10 +391,14 @@
 
 .emptyLink {
   display: inline-block;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #665848;
   font-size: 13px;
   font-weight: 600;
   text-decoration: underline;
+  cursor: pointer;
 }
 
 .footerNote {
