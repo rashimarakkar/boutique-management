@@ -89,6 +89,13 @@ export class OrderMediaStorage {
     await this.removeFiles(obsolete);
   }
 
+  async removeOrderFiles(orderId: string) {
+    if (!/^[a-f\d]{24}$/i.test(orderId)) {
+      throw new NotFoundException('Order media not found');
+    }
+    await rm(this.orderDirectory(orderId), { recursive: true, force: true });
+  }
+
   private async persistDataUrl(orderId: string, value: string) {
     const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
     if (!match) {

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { NewOrderDialog } from '../../components/new-order-dialog';
 import { API, apiFetch } from '../../lib/api';
@@ -39,8 +39,11 @@ const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
 
 export default function ClientDetailsPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [data, setData] = useState<ClientSummary | null>(null);
   const [error, setError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
@@ -60,6 +63,29 @@ export default function ClientDetailsPage() {
     return () => controller.abort();
   }, [params.id, refreshVersion]);
 
+  const deleteClient = async () => {
+    if (!data || !window.confirm(`Delete client ${data.client.name}? This cannot be undone.`)) return;
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      const response = await apiFetch(`${API}/clients/${data.client._id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const details = Array.isArray(body?.message)
+          ? body.message.join(' ')
+          : typeof body?.message === 'string'
+            ? body.message
+            : 'Client could not be deleted.';
+        throw new Error(details);
+      }
+      router.replace('/clients');
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Client could not be deleted.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (error) {
     return <main className={styles.page}><Link href="/clients" className={styles.back}>← Clients</Link><p className={styles.state}>{error}</p></main>;
   }
@@ -77,13 +103,19 @@ export default function ClientDetailsPage() {
             {client.phone}{client.email ? ` · ${client.email}` : ''}
           </p>
         </div>
-        <NewOrderDialog
-          label="+ New order"
-          className={styles.newOrder}
-          initialClient={client}
-          onCreated={() => setRefreshVersion((version) => version + 1)}
-        />
+        <div className={styles.headerActions}>
+          <button type="button" className={styles.deleteButton} onClick={deleteClient} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete client'}
+          </button>
+          <NewOrderDialog
+            label="+ New order"
+            className={styles.newOrder}
+            initialClient={client}
+            onCreated={() => setRefreshVersion((version) => version + 1)}
+          />
+        </div>
       </header>
+      {deleteError && <p className={styles.deleteError} role="alert">{deleteError}</p>}
 
       <section className={styles.metrics}>
         <article className={styles.metric}><span>Total orders</span><strong>{summary.totalOrders}</strong></article>

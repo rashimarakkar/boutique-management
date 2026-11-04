@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, StreamableFile } from '@nestjs/common';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { CreateGarmentTypeDto } from './garment-type.dto';
 import { ListOrdersQueryDto } from './list-orders-query.dto';
@@ -21,4 +21,5 @@ export class OrdersController {
   @Get() findAll(@Query() query: ListOrdersQueryDto) { return this.orders.findAll(query); }
   @Get(':id') findOne(@Param('id') id: string) { return this.orders.findOne(id); }
   @Patch(':id') update(@Param('id') id: string, @Body() dto: UpdateOrderDto) { return this.orders.update(id, dto); }
+  @Delete(':id') remove(@Param('id') id: string) { return this.orders.remove(id); }
 }

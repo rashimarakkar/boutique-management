@@ -1,0 +1,34 @@
+.actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.deleteButton {
+  border: 0;
+  border-radius: 9px;
+  background: #b43a32;
+  color: #fff;
+  padding: 13px 19px;
+  font: 600 13px 'DM Sans', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.deleteButton:hover:not(:disabled) {
+  background: #962f28;
+  transform: translateY(-1px);
+}
+
+.deleteButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 650px) {
+  .actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './client.schema';
@@ -34,6 +34,19 @@ export class ClientsService {
     const client = await this.model.findById(id).lean();
     if (!client) throw new NotFoundException('Client not found');
     return client;
+  }
+
+  async remove(id: string) {
+    const client = await this.findOne(id);
+    const hasOrders = await this.orders.exists({
+      clientId: { $in: [client._id, client._id.toString()] },
+    });
+    if (hasOrders) {
+      throw new ConflictException('This client has existing orders. Delete the orders before deleting this client.');
+    }
+
+    await this.model.findByIdAndDelete(id).exec();
+    return { deleted: true };
   }
 
   async getSummary(id: string) {

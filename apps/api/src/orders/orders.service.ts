@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
@@ -11,6 +11,8 @@ import { OrderMediaStorage } from './order-media.storage';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectModel(Order.name) private readonly model: Model<OrderDocument>,
     @InjectModel(Client.name) private readonly clients: Model<ClientDocument>,
@@ -141,6 +143,25 @@ export class OrdersService {
       ...(media.sketchUrl ? [media.sketchUrl] : []),
     ]);
     return order;
+  }
+
+  async remove(id: string) {
+    const order = await this.model.findByIdAndDelete(id).exec();
+    if (!order) throw new NotFoundException('Order not found');
+
+    try {
+      await this.mediaStorage.removeOrderFiles(order._id.toString());
+      return { deleted: true };
+    } catch (error) {
+      this.logger.error(
+        `Order ${order._id.toString()} was deleted, but its media files could not be removed`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      return {
+        deleted: true,
+        warning: 'The order was deleted, but its photo and sketch files could not be removed.',
+      };
+    }
   }
 
   async getMedia(orderId: string, fileName: string) {

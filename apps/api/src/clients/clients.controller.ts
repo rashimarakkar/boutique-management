@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto';
 import { ListClientsQueryDto } from './list-clients-query.dto';
@@ -11,4 +11,5 @@ export class ClientsController {
   @Get() findAll(@Query('q') q?: string) { return this.clients.findAll(q); }
   @Get(':id/summary') getSummary(@Param('id') id: string) { return this.clients.getSummary(id); }
   @Get(':id') findOne(@Param('id') id: string) { return this.clients.findOne(id); }
+  @Delete(':id') remove(@Param('id') id: string) { return this.clients.remove(id); }
 }

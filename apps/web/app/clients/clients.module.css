@@ -14,6 +14,12 @@
   margin-bottom: 28px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .back {
   display: inline-block;
   margin-bottom: 20px;
@@ -51,6 +57,34 @@
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.deleteButton {
+  border: 0;
+  border-radius: 8px;
+  background: #b43a32;
+  color: #fff;
+  padding: 12px 17px;
+  font: 600 13px 'DM Sans', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.deleteButton:hover:not(:disabled) {
+  background: #962f28;
+  transform: translateY(-1px);
+}
+
+.deleteButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.deleteError {
+  margin: -12px 0 16px;
+  color: #9b3930;
+  font-size: 13px;
 }
 
 .search {
@@ -335,6 +369,11 @@
 @media (max-width: 430px) {
   .header {
     align-items: flex-start;
+  }
+
+  .headerActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .newOrder {
