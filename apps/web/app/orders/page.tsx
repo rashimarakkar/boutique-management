@@ -36,9 +36,13 @@ type OrderPage = {
 };
 
 const PAGE_SIZES = [10, 20, 50];
+const EXPORT_PAGE_SIZE = 100;
 
 const labelForStatus = (status: string) =>
   status.replaceAll('_', ' ');
+const escapeHtml = (value: string) =>
+  value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 
 export default function OrdersPage() {
   const [view, setView] = useState('all');
@@ -50,6 +54,8 @@ export default function OrdersPage() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   useEffect(() => {
     const requestedView = new URLSearchParams(
@@ -106,6 +112,97 @@ export default function OrdersPage() {
       year: 'numeric',
     }).format(new Date(date));
 
+  const exportOrders = async () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setExportError('Allow pop-ups for this site to export orders.');
+      return;
+    }
+
+    setExporting(true);
+    setExportError('');
+    printWindow.document.write('<!doctype html><title>Preparing orders PDF</title><p>Preparing orders…</p>');
+    printWindow.document.close();
+
+    try {
+      const allOrders: Order[] = [];
+      let exportTotal = 0;
+      let exportSkip = 0;
+
+      do {
+        const params = new URLSearchParams();
+        if (view !== 'all') params.set('view', view);
+        if (submittedSearch) params.set('q', submittedSearch);
+        params.set('skip', String(exportSkip));
+        params.set('limit', String(EXPORT_PAGE_SIZE));
+
+        const response = await apiFetch(`${API}/orders?${params.toString()}`, {
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('Orders could not be loaded for export.');
+
+        const page = (await response.json()) as OrderPage;
+        allOrders.push(...page.data);
+        exportTotal = page.total;
+        exportSkip += page.limit;
+      } while (allOrders.length < exportTotal);
+
+      const rows = allOrders.map((order) => {
+        const totalAmount = order.totalAmount ?? 0;
+        const collected = order.advancePaid ?? 0;
+        const due = Math.max(0, totalAmount - collected);
+        return `<tr>
+          <td>${escapeHtml(order.clientId?.name ?? 'Unknown client')}</td>
+          <td>${escapeHtml(order.clientId?.phone ?? '')}</td>
+          <td>${escapeHtml(order.garmentType)}</td>
+          <td>${escapeHtml(formatDate(order.deliveryDate))}</td>
+          <td>${escapeHtml(labelForStatus(order.status))}</td>
+          <td>₹${totalAmount.toLocaleString('en-IN')}</td>
+          <td>₹${collected.toLocaleString('en-IN')}</td>
+          <td>₹${due.toLocaleString('en-IN')}</td>
+        </tr>`;
+      }).join('');
+      const filterLabel = filters.find(([value]) => value === view)?.[1] ?? 'All orders';
+      const title = `Orders - ${filterLabel}${submittedSearch ? ` - ${submittedSearch}` : ''}`;
+
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>${escapeHtml(title)}</title>
+            <style>
+              @page { size: landscape; margin: 12mm; }
+              * { box-sizing: border-box; }
+              body { color: #292725; font: 12px Arial, sans-serif; }
+              h1 { margin: 0 0 6px; font: 700 22px Georgia, serif; }
+              .meta { margin: 0 0 18px; color: #665f56; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { padding: 8px 7px; border: 1px solid #ded8d0; text-align: left; }
+              th { background: #f2efeb; font-size: 10px; text-transform: uppercase; }
+              tr { break-inside: avoid; }
+              @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+            </style>
+          </head>
+          <body>
+            <h1>Hamiz Boutique — Orders</h1>
+            <p class="meta">${escapeHtml(filterLabel)}${submittedSearch ? ` · Search: ${escapeHtml(submittedSearch)}` : ''} · ${allOrders.length} orders · Exported ${escapeHtml(new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date()))}</p>
+            <table>
+              <thead><tr><th>Client</th><th>Phone</th><th>Garment</th><th>Delivery</th><th>Status</th><th>Billed</th><th>Collected</th><th>Due</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <script>window.addEventListener('load', () => window.print());</script>
+          </body>
+        </html>`);
+      printWindow.document.close();
+    } catch (cause) {
+      printWindow.close();
+      setExportError(cause instanceof Error ? cause.message : 'Orders could not be exported.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <main className={styles.page}>
       {/* Page Header */}
@@ -122,12 +219,23 @@ export default function OrdersPage() {
           </p>
         </div>
 
-        <NewOrderDialog
-          label="+ New order"
-          className={styles.newOrder}
-          onCreated={() => setRefreshVersion((version) => version + 1)}
-        />
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.exportButton}
+            onClick={exportOrders}
+            disabled={exporting || total === 0}
+          >
+            {exporting ? 'Preparing PDF…' : 'Export PDF'}
+          </button>
+          <NewOrderDialog
+            label="+ New order"
+            className={styles.newOrder}
+            onCreated={() => setRefreshVersion((version) => version + 1)}
+          />
+        </div>
       </header>
+      {exportError && <p className={styles.exportError} role="alert">{exportError}</p>}
 
       {/* Search and Filters */}
       <section className={styles.controls}>

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
+import { NewOrderDialog } from '../components/new-order-dialog';
 import { API, apiFetch } from '../lib/api';
 import styles from './clients.module.css';
 
@@ -27,6 +28,7 @@ export default function ClientsPage() {
   const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,7 +57,7 @@ export default function ClientsPage() {
       });
 
     return () => controller.abort();
-  }, [submittedQuery, skip, limit]);
+  }, [submittedQuery, skip, limit, refreshVersion]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -72,7 +74,11 @@ export default function ClientsPage() {
           <h1>Clients</h1>
           <p className={styles.subtitle}>Find a client to view their orders and account summary.</p>
         </div>
-        <Link href="/" className={styles.newOrder}>+ New order</Link>
+        <NewOrderDialog
+          label="+ New order"
+          className={styles.newOrder}
+          onCreated={() => setRefreshVersion((version) => version + 1)}
+        />
       </header>
 
       <form className={styles.search} onSubmit={submit}>

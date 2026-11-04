@@ -17,6 +17,12 @@
   gap: 20px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .backLink {
   display: inline-flex;
   align-items: center;
@@ -67,6 +73,28 @@
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.2s, transform 0.2s;
+}
+
+.exportButton {
+  border: 1px solid #d9d0c4;
+  border-radius: 9px;
+  background: #fff;
+  color: #554e45;
+  padding: 12px 16px;
+  font: 600 13px 'DM Sans', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exportButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.exportError {
+  margin: -12px 0 16px;
+  color: #a34f43;
+  font-size: 13px;
 }
 
 .newOrder:hover {
@@ -471,6 +499,11 @@
 
   .header {
     align-items: flex-start;
+  }
+
+  .headerActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .header h1 {
