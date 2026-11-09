@@ -262,6 +262,10 @@
   margin-bottom: 20px;
 }
 
+.paymentHistorySection {
+  margin-top: 20px;
+}
+
 .statusSummary h2,
 .historyHeading h2 {
   margin: 0;
@@ -323,6 +327,120 @@
   font-size: 12px;
 }
 
+.paymentMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.paymentMetrics > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f4f1ed;
+}
+
+.paymentMetrics > div span {
+  color: #756e65;
+  font-size: 12px;
+}
+
+.paymentMetrics > div strong {
+  color: #343930;
+  font: 700 20px 'Playfair Display', serif;
+  overflow-wrap: anywhere;
+}
+
+.paymentEntry {
+  margin: 0 20px 20px;
+  border: 1px solid #e9e2d9;
+  border-radius: 11px;
+  background: #fffdfa;
+}
+
+.paymentEntry h3,
+.paymentHistory h3 {
+  margin: 0;
+  padding: 17px 18px 0;
+  color: #514b43;
+  font: 600 16px 'Playfair Display', serif;
+}
+
+.paymentEntry > p {
+  margin: 7px 18px 0;
+  color: #82796f;
+  font-size: 12px;
+}
+
+.paymentHistory {
+  padding-bottom: 5px;
+}
+
+.paymentRecord {
+  padding: 15px 20px;
+  border-top: 1px solid #eee9e3;
+}
+
+.paymentRecordHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paymentRecordHeader > div {
+  display: grid;
+  gap: 4px;
+}
+
+.paymentRecordHeader strong {
+  color: #343930;
+  font-size: 16px;
+}
+
+.paymentRecordHeader span,
+.paymentRecord p {
+  color: #82796f;
+  font-size: 12px;
+}
+
+.paymentRecord p {
+  margin: 8px 0;
+}
+
+.paymentAllocations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.paymentAllocations a,
+.paymentAllocations span {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #f4f1ed;
+  color: #665848;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.paymentAllocations a:hover {
+  background: #e9dfce;
+}
+
+.paymentAllocations span {
+  background: #f1e7d5;
+}
+
+.paymentError {
+  padding: 8px 20px;
+  color: #9b3930;
+  font-size: 13px;
+}
+
 @media (max-width: 700px) {
   .page {
     padding: 26px 15px 48px;
@@ -363,6 +481,19 @@
 
   .orderPayment {
     flex: 1;
+  }
+
+  .paymentMetrics {
+    grid-template-columns: 1fr 1fr;
+    padding: 14px;
+  }
+
+  .paymentEntry {
+    margin: 0 14px 14px;
+  }
+
+  .paymentHistorySection {
+    margin-top: 16px;
   }
 }
 

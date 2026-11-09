@@ -5,12 +5,14 @@ import { Client, ClientDocument } from './client.schema';
 import { CreateClientDto } from './dto';
 import { Order, OrderDocument, OrderStatus } from '../orders/order.schema';
 import { ListClientsQueryDto } from './list-clients-query.dto';
+import { CustomerPayment, PaymentDocument } from '../payments/payment.schema';
 
 @Injectable()
 export class ClientsService {
   constructor(
     @InjectModel(Client.name) private readonly model: Model<ClientDocument>,
     @InjectModel(Order.name) private readonly orders: Model<OrderDocument>,
+    @InjectModel(CustomerPayment.name) private readonly payments: Model<PaymentDocument>,
   ) {}
   create(dto: CreateClientDto) { return this.model.create(dto); }
   findAll(query = '') {
@@ -44,6 +46,9 @@ export class ClientsService {
     if (hasOrders) {
       throw new ConflictException('This client has existing orders. Delete the orders before deleting this client.');
     }
+    if (await this.payments.exists({ clientId: client._id })) {
+      throw new ConflictException('This client has payment history and cannot be deleted.');
+    }
 
     await this.model.findByIdAndDelete(id).exec();
     return { deleted: true };
@@ -61,6 +66,7 @@ export class ClientsService {
           status: 1,
           totalAmount: 1,
           advancePaid: 1,
+          paidAmount: 1,
         })
         .sort({ deliveryDate: -1, _id: -1 })
         .toArray(),
@@ -74,7 +80,7 @@ export class ClientsService {
           $group: {
             _id: null,
             totalBilled: { $sum: { $ifNull: ['$totalAmount', 0] } },
-            totalCollected: { $sum: { $ifNull: ['$advancePaid', 0] } },
+            totalCollected: { $sum: { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] } },
             totalDue: {
               $sum: {
                 $max: [
@@ -82,7 +88,7 @@ export class ClientsService {
                   {
                     $subtract: [
                       { $ifNull: ['$totalAmount', 0] },
-                      { $ifNull: ['$advancePaid', 0] },
+                      { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] },
                     ],
                   },
                 ],
@@ -104,7 +110,14 @@ export class ClientsService {
 
     return {
       client,
-      orders,
+      orders: orders.map((order) => {
+        const paidAmount = order.paidAmount ?? order.advancePaid ?? 0;
+        return {
+          ...order,
+          paidAmount,
+          balanceAmount: Math.max(0, (order.totalAmount ?? 0) - paidAmount),
+        };
+      }),
       summary: {
         totalOrders: orders.length,
         totalBilled: financialRows[0]?.totalBilled ?? 0,

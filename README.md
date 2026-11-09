@@ -40,3 +40,14 @@ Keep `JWT_SECRET` private and stable. Changing it signs out every active session
 If sign-in succeeds but `/api/auth/me` returns `401 Authentication required`, inspect the browser Network panel: the login/bootstrap response should contain `Set-Cookie`, and the `/auth/me` request should include the `auth_token` cookie. Also ensure Vercel and Render point to the same production API/database, since accounts are stored in that API's MongoDB.
 
 Order photos and sketches are stored as files in `apps/api/uploads` by default, while MongoDB stores their API paths. Set `UPLOADS_DIR` to a persistent local volume in deployment; include that directory in backups. Files are served through authenticated API routes. Existing embedded photos and sketches are moved to files when their order is next opened and saved.
+
+## Payments
+
+Payments are recorded against a client and can be allocated to one or more of that client's orders. An allocation may use part of a payment; any remainder stays unallocated and can be assigned later. Order responses include `paidAmount` and `balanceAmount`, calculated from the allocation ledger. Existing per-order `advancePaid` updates are retained as payment entries; reductions are recorded as allocation reversals. Existing advances are imported into the history when that history is accessed.
+
+- `POST /api/clients/:clientId/payments` records a receipt. Send a unique `idempotencyKey` with the amount, optional method/reference/date/notes, and optional `allocations: [{ "orderId": "...", "amount": 500 }]`.
+- `GET /api/clients/:clientId/payments` returns customer payment history and each payment's unallocated amount.
+- `GET /api/orders/:orderId/payments` returns the payment allocations for an order.
+- `POST /api/payments/:paymentId/allocations` allocates a later portion of a payment. Include a unique `idempotencyKey` for the allocation request and an `allocations` array.
+
+Payment DTOs accept whole rupees. Allocations are transactionally checked against both the payment's unallocated amount and the order's remaining balance. MongoDB transactions require a replica set; MongoDB Atlas supports this, while a standalone local MongoDB container does not.

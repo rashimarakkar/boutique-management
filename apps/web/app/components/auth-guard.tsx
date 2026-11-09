@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ReactNode, useEffect, useState } from 'react';
 import { API, apiFetch } from '../lib/api';
 
@@ -72,6 +73,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     <>
       <div className="auth-controls">
         {error && <span role="alert">{error}</span>}
+        {pathname === '/' && <Link className="auth-nav-link" href="/clients">View clients</Link>}
         <button onClick={logout} disabled={loggingOut}>
           {loggingOut ? 'Signing out…' : 'Log out'}
         </button>

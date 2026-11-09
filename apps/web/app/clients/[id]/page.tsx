@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { NewOrderDialog } from '../../components/new-order-dialog';
+import { ExistingAdvanceAllocation, PaymentEntry } from '../../components/payment-entry';
 import { API, apiFetch } from '../../lib/api';
 import styles from '../clients.module.css';
 
@@ -14,6 +15,23 @@ type Order = {
   status: string;
   totalAmount?: number;
   advancePaid?: number;
+  paidAmount?: number;
+  balanceAmount?: number;
+};
+type Payment = {
+  _id: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  receivedAt: string;
+  notes?: string;
+  unallocatedAmount: number;
+  allocations: Array<{
+    orderId: string;
+    amount: number;
+    notes?: string;
+    reversals?: Array<{ amount: number; reason: string }>;
+  }>;
 };
 type ClientSummary = {
   client: { _id: string; name: string; phone: string; email?: string; address?: string; notes?: string };
@@ -41,6 +59,9 @@ export default function ClientDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [data, setData] = useState<ClientSummary | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -59,6 +80,31 @@ export default function ClientDetailsPage() {
       .catch((cause: unknown) => {
         if (cause instanceof Error && cause.name === 'AbortError') return;
         setError(cause instanceof Error ? cause.message : 'Client details could not be loaded.');
+      });
+    return () => controller.abort();
+  }, [params.id, refreshVersion]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPaymentsLoading(true);
+    apiFetch(`${API}/clients/${params.id}/payments`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(typeof body?.message === 'string' ? body.message : 'Payment history could not be loaded.');
+        }
+        setPayments((await response.json()) as Payment[]);
+        setPaymentError('');
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof Error && cause.name === 'AbortError') return;
+        setPaymentError(cause instanceof Error ? cause.message : 'Payment history could not be loaded.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPaymentsLoading(false);
       });
     return () => controller.abort();
   }, [params.id, refreshVersion]);
@@ -92,6 +138,7 @@ export default function ClientDetailsPage() {
   if (!data) return <main className={styles.page}><p className={styles.state}>Loading client…</p></main>;
 
   const { client, orders, summary } = data;
+  const totalPaymentsReceived = payments.reduce((sum, payment) => sum + payment.amount, 0);
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -119,7 +166,7 @@ export default function ClientDetailsPage() {
 
       <section className={styles.metrics}>
         <article className={styles.metric}><span>Total orders</span><strong>{summary.totalOrders}</strong></article>
-        <article className={styles.metric}><span>Total collected</span><strong>{money(summary.totalCollected)}</strong></article>
+        <article className={styles.metric}><span>Total paid</span><strong>{money(totalPaymentsReceived)}</strong></article>
         <article className={`${styles.metric} ${styles.due}`}><span>Payment due</span><strong>{money(summary.totalDue)}</strong></article>
         <article className={styles.metric}><span>Total billed</span><strong>{money(summary.totalBilled)}</strong></article>
       </section>
@@ -143,7 +190,7 @@ export default function ClientDetailsPage() {
         {orders.length === 0 ? <p className={styles.state}>No orders for this client yet.</p> :
           <div className={styles.orderList}>
             {orders.map((order) => {
-              const balance = Math.max(0, (order.totalAmount ?? 0) - (order.advancePaid ?? 0));
+              const balance = order.balanceAmount ?? Math.max(0, (order.totalAmount ?? 0) - (order.paidAmount ?? order.advancePaid ?? 0));
               return (
                 <Link className={styles.order} href={`/orders/${order._id}`} key={order._id}>
                   <span className={styles.orderMain}>
@@ -152,7 +199,7 @@ export default function ClientDetailsPage() {
                   </span>
                   <span className={styles.orderStatus}>{statusNames[order.status] ?? order.status.replaceAll('_', ' ')}</span>
                   <span className={styles.orderPayment}>
-                    <strong>{money(order.advancePaid ?? 0)} collected</strong>
+                    <strong>{money(order.paidAmount ?? order.advancePaid ?? 0)} collected</strong>
                     <span>{balance > 0 ? `${money(balance)} due` : 'No balance due'}</span>
                   </span>
                   <span className={styles.arrow}>View →</span>
@@ -160,6 +207,74 @@ export default function ClientDetailsPage() {
               );
             })}
           </div>}
+      </section>
+
+      <section className={`${styles.history} ${styles.paymentHistorySection}`}>
+        <div className={styles.historyHeading}>
+          <div><p className={styles.eyebrow}>CUSTOMER LEDGER</p><h2>Payments & advances</h2></div>
+          <span>{payments.length} receipts</span>
+        </div>
+        <div className={styles.paymentMetrics}>
+          <div><span>Total stitching amount</span><strong>{money(summary.totalBilled)}</strong></div>
+          <div><span>Total amount paid</span><strong>{money(totalPaymentsReceived)}</strong></div>
+          <div><span>Total outstanding</span><strong>{money(summary.totalDue)}</strong></div>
+          <div><span>Unallocated advance</span><strong>{money(payments.reduce((sum, payment) => sum + (payment.unallocatedAmount ?? 0), 0))}</strong></div>
+        </div>
+        <div className={styles.paymentEntry}>
+          <h3>Record a customer payment</h3>
+          <p>Allocate part or all of a receipt to this customer’s outstanding orders, or leave it as an advance.</p>
+          <PaymentEntry
+            clientId={client._id}
+            orders={orders.map((order) => ({
+              _id: order._id,
+              garmentType: order.garmentType,
+              totalAmount: order.totalAmount,
+              paidAmount: order.paidAmount ?? order.advancePaid,
+              balanceAmount: order.balanceAmount,
+            }))}
+            onSaved={() => setRefreshVersion((version) => version + 1)}
+          />
+        </div>
+        <div className={styles.paymentHistory}>
+          <h3>Payment history</h3>
+          {paymentError && <p className={styles.paymentError} role="alert">{paymentError}</p>}
+          {paymentsLoading ? <p className={styles.state}>Loading payment history…</p> :
+            payments.length === 0 ? <p className={styles.state}>No payments recorded for this customer yet.</p> :
+              payments.map((payment) => (
+                <article className={styles.paymentRecord} key={payment._id}>
+                  <div className={styles.paymentRecordHeader}>
+                    <div><strong>{money(payment.amount)}</strong><span>{new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(payment.receivedAt))} · {payment.method.replaceAll('_', ' ')}</span></div>
+                    {payment.reference && <span>Ref: {payment.reference}</span>}
+                  </div>
+                  {payment.notes && <p>{payment.notes}</p>}
+                  {payment.unallocatedAmount > 0 && (
+                    <ExistingAdvanceAllocation
+                      paymentId={payment._id}
+                      availableAmount={payment.unallocatedAmount}
+                      orders={orders.map((order) => ({
+                        _id: order._id,
+                        garmentType: order.garmentType,
+                        totalAmount: order.totalAmount,
+                        paidAmount: order.paidAmount ?? order.advancePaid,
+                        balanceAmount: order.balanceAmount,
+                      }))}
+                      onSaved={() => setRefreshVersion((version) => version + 1)}
+                    />
+                  )}
+                  <div className={styles.paymentAllocations}>
+                    {payment.allocations.map((allocation, index) => {
+                      const order = orders.find((item) => item._id === allocation.orderId);
+                      const reversed = (allocation.reversals ?? []).reduce((sum, item) => sum + item.amount, 0);
+                      return <Link href={`/orders/${allocation.orderId}`} key={`${allocation.orderId}-${index}`}>
+                        {order?.garmentType ?? 'Stitching order'} · {money(allocation.amount - reversed)} allocated
+                        {reversed > 0 ? ` (${money(reversed)} reversed)` : ''}
+                      </Link>;
+                    })}
+                    {payment.unallocatedAmount > 0 && <span>{money(payment.unallocatedAmount)} unallocated</span>}
+                  </div>
+                </article>
+              ))}
+        </div>
       </section>
     </main>
   );

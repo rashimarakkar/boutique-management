@@ -4,6 +4,181 @@
   gap: 12px;
 }
 
+.back,
+.back:visited {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #665848;
+  font: 500 13px 'DM Sans', sans-serif;
+  text-decoration: none;
+  transition: color 0.18s, transform 0.18s;
+}
+
+.back span {
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 0.18s;
+}
+
+.back:hover {
+  color: #343930;
+}
+
+.back:hover span {
+  transform: translateX(-3px);
+}
+
+.back:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #bd9e7e;
+  outline-offset: 4px;
+}
+
+.orderHeaderInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+.garmentTitle {
+  margin: 8px 0 15px !important;
+  color: #292725;
+  font: 700 clamp(30px, 4vw, 42px)/1.08 'Playfair Display', serif !important;
+  letter-spacing: -0.5px;
+  overflow-wrap: anywhere;
+}
+
+.customerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  color: #756e65;
+  font: 400 13px 'DM Sans', sans-serif;
+}
+
+.customerLabel {
+  padding: 5px 8px;
+  border: 1px solid #e8dfd3;
+  border-radius: 999px;
+  background: #f2ece4;
+  color: #75634f;
+  font: 500 9px 'DM Mono', monospace;
+  letter-spacing: 0.8px;
+}
+
+.customerName {
+  max-width: min(100%, 340px);
+  color: #343930;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.customerName:hover,
+.customerHistory:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.customerPhone {
+  color: #756e65;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.customerPhone:hover {
+  color: #343930;
+}
+
+.metaDivider {
+  color: #b6aa9b;
+}
+
+.customerHistory {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #665848;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.statusControl {
+  display: grid;
+  min-width: 220px;
+  gap: 6px;
+  color: #756e65;
+  font: 500 10px 'DM Mono', monospace;
+  letter-spacing: 1.2px;
+}
+
+.statusSelect {
+  width: 100%;
+  appearance: none;
+  border: 1px solid #d9d2ca;
+  border-radius: 11px;
+  padding: 13px 42px 13px 15px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23665848' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  color: #343930;
+  font: 600 14px 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s, background-color 0.18s;
+}
+
+.statusSelect:hover:not(:disabled) {
+  border-color: #bd9e7e;
+  box-shadow: 0 4px 14px #34393012;
+}
+
+.statusSelect:focus-visible {
+  outline: 3px solid #bd9e7e55;
+  border-color: #a88664;
+}
+
+.statusSelect:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.statusSelect[data-status='new'],
+.statusSelect[data-status='measurements_pending'] {
+  background-color: #f5f0e7;
+}
+
+.statusSelect[data-status='designing'] {
+  background-color: #f2edf8;
+}
+
+.statusSelect[data-status='stitching'] {
+  background-color: #eaf0f8;
+}
+
+.statusSelect[data-status='ready'] {
+  background-color: #edf3e9;
+}
+
+.statusSelect[data-status='delivered'] {
+  background-color: #e6efe7;
+}
+
+.statusSelect[data-status='cancelled'] {
+  background-color: #f8eae7;
+  color: #9b3930;
+}
+
+.statusControl small {
+  min-height: 12px;
+  color: #82796f;
+  font: 400 11px 'DM Sans', sans-serif;
+  letter-spacing: 0;
+}
+
 .deleteButton {
   border: 0;
   border-radius: 9px;
@@ -26,9 +201,107 @@
   cursor: default;
 }
 
+.paymentHistory {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #ebe5de;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.paymentHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  background: #f2efeb;
+}
+
+.paymentHeading h2 {
+  margin: 0;
+  color: #343930;
+  font: 700 22px 'Playfair Display', serif;
+}
+
+.paymentHeading a {
+  color: #665848;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.paymentEntry {
+  border-bottom: 1px solid #eee9e3;
+}
+
+.paymentNotice,
+.paymentError {
+  margin: 0;
+  padding: 15px 20px;
+  color: #82796f;
+  font-size: 13px;
+}
+
+.paymentError {
+  color: #9b3930;
+}
+
+.paymentRecord {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee9e3;
+  color: #82796f;
+  font-size: 12px;
+}
+
+.paymentRecord:last-child {
+  border-bottom: 0;
+}
+
+.paymentRecordHeading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.paymentRecordHeading strong {
+  color: #343930;
+  font-size: 16px;
+}
+
+.paymentRecord p {
+  margin: 8px 0 0;
+}
+
+.paymentRecord p span {
+  color: #9b5146;
+}
+
 @media (max-width: 650px) {
   .actions {
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .customerMeta {
+    gap: 7px;
+  }
+
+  .metaDivider {
+    display: none;
+  }
+
+  .customerHistory {
+    flex-basis: 100%;
+  }
+
+  .statusControl {
+    flex: 1 1 220px;
+  }
+
+  .paymentHeading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

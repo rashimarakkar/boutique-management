@@ -1,0 +1,131 @@
+.form {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form label {
+  display: grid;
+  gap: 6px;
+  color: #665f56;
+  font-size: 12px;
+}
+
+.form input,
+.form select,
+.form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #d9d2ca;
+  border-radius: 8px;
+  background: #fffcf9;
+  color: #292725;
+  font: 400 14px 'DM Sans', sans-serif;
+}
+
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  outline: 2px solid #bd9e7e;
+  border-color: transparent;
+}
+
+.allocations {
+  display: grid;
+  gap: 8px;
+}
+
+.allocations h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 3px;
+  color: #514b43;
+  font: 600 14px 'DM Sans', sans-serif;
+}
+
+.allocations h3 span,
+.allocation small {
+  color: #82796f;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.allocation {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 150px);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #eee9e3;
+}
+
+.allocation > span {
+  display: grid;
+  gap: 2px;
+}
+
+.allocation input {
+  text-align: right;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 18px;
+  color: #665f56;
+  font-size: 12px;
+}
+
+.totals strong {
+  margin-left: 5px;
+  color: #343930;
+}
+
+.notes textarea {
+  min-height: 65px;
+  resize: vertical;
+}
+
+.error,
+.success {
+  margin: 0;
+  font-size: 13px;
+}
+
+.error { color: #9b3930; }
+.success { color: #526b46; }
+
+.submit {
+  justify-self: start;
+  border: 0;
+  border-radius: 8px;
+  background: #343930;
+  color: #fff;
+  padding: 11px 16px;
+  font: 600 13px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 520px) {
+  .fields {
+    grid-template-columns: 1fr;
+  }
+
+  .allocation {
+    grid-template-columns: minmax(0, 1fr) minmax(85px, 120px);
+  }
+}

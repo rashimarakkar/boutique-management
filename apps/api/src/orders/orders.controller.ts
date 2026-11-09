@@ -18,8 +18,8 @@ export class OrdersController {
       disposition: 'inline',
     });
   }
-  @Get() findAll(@Query() query: ListOrdersQueryDto) { return this.orders.findAll(query); }
-  @Get(':id') findOne(@Param('id') id: string) { return this.orders.findOne(id); }
+  @Get() findAll(@Query() query: ListOrdersQueryDto): ReturnType<OrdersService['findAll']> { return this.orders.findAll(query); }
+  @Get(':id') findOne(@Param('id') id: string): ReturnType<OrdersService['findOne']> { return this.orders.findOne(id); }
   @Patch(':id') update(@Param('id') id: string, @Body() dto: UpdateOrderDto) { return this.orders.update(id, dto); }
   @Delete(':id') remove(@Param('id') id: string) { return this.orders.remove(id); }
 }

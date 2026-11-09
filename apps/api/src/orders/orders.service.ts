@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
@@ -8,6 +8,7 @@ import { OrderStatus } from './order.schema';
 import { ListOrdersQueryDto } from './list-orders-query.dto';
 import { GarmentType, GarmentTypeDocument } from './garment-type.schema';
 import { OrderMediaStorage } from './order-media.storage';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class OrdersService {
@@ -18,9 +19,15 @@ export class OrdersService {
     @InjectModel(Client.name) private readonly clients: Model<ClientDocument>,
     @InjectModel(GarmentType.name) private readonly garmentTypes: Model<GarmentTypeDocument>,
     private readonly mediaStorage: OrderMediaStorage,
+    private readonly paymentsService: PaymentsService,
   ) {}
   async create(dto: CreateOrderDto) {
-    const order = new this.model(dto);
+    const order = new this.model({
+      ...dto,
+      advancePaid: 0,
+      paidAmount: 0,
+      legacyPaidAmount: 0,
+    });
     const media = await this.mediaStorage.persistOrderMedia(
       order._id.toString(),
       dto.imageUrls ?? [],
@@ -31,7 +38,12 @@ export class OrdersService {
       order.sketchUrl = media.sketchUrl;
     }
     try {
-      return await order.save();
+      if ((dto.advancePaid ?? 0) > 0) {
+        const saved = await this.paymentsService.createOrderWithLegacyAdvance(order, dto.advancePaid!);
+        return this.withFinancialAmounts(saved.toObject());
+      }
+      const saved = await order.save();
+      return this.withFinancialAmounts(saved.toObject());
     } catch (error) {
       await this.mediaStorage.removeFiles(media.createdFiles);
       throw error;
@@ -67,7 +79,12 @@ export class OrdersService {
       throw error;
     }
   }
-  async findAll(query: ListOrdersQueryDto) {
+  async findAll(query: ListOrdersQueryDto): Promise<{
+    data: Array<Record<string, unknown>>;
+    total: number;
+    skip: number;
+    limit: number;
+  }> {
     const { status, view, q, skip = 0, limit = 20 } = query;
     const now = new Date();
     const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
@@ -78,8 +95,13 @@ export class OrdersService {
       if (view === 'delivered') filter.status = OrderStatus.DELIVERED;
       if (view === 'overdue') { filter.status = active; filter.deliveryDate = { $lt: now }; }
       if (view === 'due_today') { filter.status = active; filter.deliveryDate = { $gte: now, $lte: todayEnd }; }
-      if (view === 'payment_due') filter.$expr = { $gt: [{ $subtract: [{ $ifNull: ['$totalAmount', 0] }, { $ifNull: ['$advancePaid', 0] }] }, 0] };
-      if (view === 'received') filter.advancePaid = { $gt: 0 };
+      if (view === 'payment_due') filter.$expr = {
+        $gt: [
+          { $subtract: [{ $ifNull: ['$totalAmount', 0] }, { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] }] },
+          0,
+        ],
+      };
+      if (view === 'received') filter.$expr = { $gt: [{ $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] }, 0] };
     }
     if (q?.trim()) {
       const term = q.trim(); const match = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -94,9 +116,14 @@ export class OrdersService {
         .sort({ deliveryDate: 1, _id: 1 }).skip(skip).limit(limit).lean(),
       this.model.countDocuments(filter),
     ]);
-    return { data, total, skip, limit };
+    return {
+      data: data.map((order) => this.withFinancialAmounts(order)),
+      total,
+      skip,
+      limit,
+    };
   }
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Record<string, unknown>> {
     const order = await this.model.findById(id).exec();
     if (!order) throw new NotFoundException('Order not found');
     const media = await this.mediaStorage.persistOrderMedia(
@@ -117,35 +144,70 @@ export class OrdersService {
         ...(media.sketchUrl ? [media.sketchUrl] : []),
       ]);
     }
-    return this.model.findById(id)
+    const result = await this.model.findById(id)
       .populate('clientId', 'name phone email address notes')
       .lean();
+    if (!result) throw new NotFoundException('Order not found');
+    return this.withFinancialAmounts(result);
   }
   async update(id: string, dto: UpdateOrderDto) {
     const existing = await this.model.findById(id).exec();
     if (!existing) throw new NotFoundException('Order not found');
+    const paidAmount = existing.paidAmount ?? existing.advancePaid ?? 0;
+    if (dto.totalAmount !== undefined && dto.totalAmount < paidAmount) {
+      throw new BadRequestException('Order total cannot be less than the amount already paid');
+    }
+    if (dto.advancePaid !== undefined) {
+      await this.paymentsService.recordLegacyOrderAdvance(id, dto.advancePaid);
+    }
     const media = await this.mediaStorage.persistOrderMedia(
       existing._id.toString(),
       dto.imageUrls ?? existing.imageUrls ?? [],
       dto.sketchUrl === undefined ? existing.sketchUrl : dto.sketchUrl,
     );
-    const order = await this.model.findByIdAndUpdate(
-      id,
-      { ...dto, imageUrls: media.imageUrls, sketchUrl: media.sketchUrl },
+    const { advancePaid: _legacyAdvancePaid, ...orderFields } = dto;
+    const filter: Record<string, unknown> = { _id: id };
+    if (dto.totalAmount !== undefined) {
+      filter.$or = [
+        { paidAmount: { $lte: dto.totalAmount } },
+        { paidAmount: { $exists: false }, advancePaid: { $lte: dto.totalAmount } },
+        { paidAmount: null, advancePaid: { $lte: dto.totalAmount } },
+        { paidAmount: { $exists: false }, advancePaid: { $exists: false } },
+        { paidAmount: null, advancePaid: { $exists: false } },
+      ];
+    }
+    const order = await this.model.findOneAndUpdate(
+      filter,
+      {
+        ...orderFields,
+        imageUrls: media.imageUrls,
+        sketchUrl: media.sketchUrl,
+      },
       { new: true, runValidators: true },
     );
     if (!order) {
       await this.mediaStorage.removeFiles(media.createdFiles);
+      if (dto.totalAmount !== undefined && await this.model.exists({ _id: id })) {
+        throw new ConflictException('Order total cannot be less than the amount already paid');
+      }
       throw new NotFoundException('Order not found');
     }
     await this.mediaStorage.removeUnreferencedFiles(order._id.toString(), [
       ...media.imageUrls,
       ...(media.sketchUrl ? [media.sketchUrl] : []),
     ]);
-    return order;
+    return this.withFinancialAmounts(order.toObject());
   }
 
   async remove(id: string) {
+    const existing = await this.model.findById(id).exec();
+    if (!existing) throw new NotFoundException('Order not found');
+    if (
+      (existing.paidAmount ?? existing.advancePaid ?? 0) > 0 ||
+      await this.paymentsService.hasAllocations(id)
+    ) {
+      throw new ConflictException('This order has payment history and cannot be deleted.');
+    }
     const order = await this.model.findByIdAndDelete(id).exec();
     if (!order) throw new NotFoundException('Order not found');
 
@@ -172,5 +234,16 @@ export class OrdersService {
       throw new NotFoundException('Media not found');
     }
     return this.mediaStorage.readMedia(orderId, fileName);
+  }
+
+  private withFinancialAmounts<
+    T extends { totalAmount?: number; advancePaid?: number; paidAmount?: number },
+  >(order: T): T & { paidAmount: number; balanceAmount: number } {
+    const paidAmount = order.paidAmount ?? order.advancePaid ?? 0;
+    return {
+      ...order,
+      paidAmount,
+      balanceAmount: Math.max(0, (order.totalAmount ?? 0) - paidAmount),
+    };
   }
 }

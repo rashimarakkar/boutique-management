@@ -4,6 +4,13 @@ import { FormEvent, MouseEvent, useEffect, useRef, useState } from 'react';
 import { API, apiFetch } from '../lib/api';
 
 type Client = { _id: string; name: string; phone: string };
+type OrderDraft = {
+  key: string;
+  garmentType: string;
+  deliveryDate: string;
+  totalAmount: string;
+  allocation: string;
+};
 type NewOrderDialogProps = {
   label: string;
   className: string;
@@ -11,7 +18,13 @@ type NewOrderDialogProps = {
   onCreated?: () => void;
 };
 
-const blankOrder = { garmentType: '', deliveryDate: '' };
+const blankOrder = (): OrderDraft => ({
+  key: `${Date.now()}-${Math.random()}`,
+  garmentType: '',
+  deliveryDate: '',
+  totalAmount: '',
+  allocation: '',
+});
 const blankClient = { name: '', phone: '' };
 
 export function NewOrderDialog({
@@ -21,7 +34,12 @@ export function NewOrderDialog({
   onCreated,
 }: NewOrderDialogProps) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(blankOrder);
+  const [orders, setOrders] = useState<OrderDraft[]>([blankOrder()]);
+  const [advanceAmount, setAdvanceAmount] = useState('');
+  const [allocationMode, setAllocationMode] = useState<'automatic' | 'manual'>('automatic');
+  const [newGarmentTypeIndex, setNewGarmentTypeIndex] = useState<number | null>(null);
+  const [createdOrderIds, setCreatedOrderIds] = useState<Record<string, string>>({});
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState('');
   const [clientMode, setClientMode] = useState<'existing' | 'new'>('existing');
   const [clientQuery, setClientQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
@@ -43,6 +61,21 @@ export function NewOrderDialog({
   const trigger = useRef<HTMLButtonElement>(null);
   const savingRef = useRef(saving);
   savingRef.current = saving;
+  const orderTotal = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+  const advance = Number(advanceAmount) || 0;
+  const allocations = orders.map((order, index) => {
+    if (allocationMode === 'manual') return Number(order.allocation) || 0;
+    const preceding = orders.slice(0, index).reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
+    return Math.max(0, Math.min(Number(order.totalAmount) || 0, advance - preceding));
+  });
+  const allocatedAmount = allocations.reduce((sum, amount) => sum + amount, 0);
+  const unallocatedAmount = Math.max(0, advance - allocatedAmount);
+  const updateOrder = (index: number, patch: Partial<OrderDraft>) => {
+    setPaymentIdempotencyKey('');
+    setOrders((current) => current.map((order, orderIndex) =>
+      orderIndex === index ? { ...order, ...patch } : order,
+    ));
+  };
 
   useEffect(() => {
     apiFetch(`${API}/orders/garment-types`, { cache: 'no-store' })
@@ -100,7 +133,12 @@ export function NewOrderDialog({
   }, [open]);
 
   const reset = () => {
-    setForm(blankOrder);
+    setOrders([blankOrder()]);
+    setCreatedOrderIds({});
+    setPaymentIdempotencyKey('');
+    setAdvanceAmount('');
+    setAllocationMode('automatic');
+    setNewGarmentTypeIndex(null);
     setClientMode('existing');
     setClientQuery('');
     setSelectedClientId('');
@@ -133,9 +171,12 @@ export function NewOrderDialog({
       setGarmentTypes((current) =>
         [...new Set([...current, result.name])].sort((a, b) => a.localeCompare(b)),
       );
-      setForm((current) => ({ ...current, garmentType: result.name }));
+      if (newGarmentTypeIndex !== null) {
+        updateOrder(newGarmentTypeIndex, { garmentType: result.name });
+      }
       setNewGarmentType('');
       setAddingGarmentType(false);
+      setNewGarmentTypeIndex(null);
       setMessage(`Garment type “${result.name}” saved.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Garment type could not be saved.');
@@ -146,6 +187,30 @@ export function NewOrderDialog({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (orders.some((order) => !order.garmentType || !order.deliveryDate)) {
+      setMessage('Add a garment type and delivery date for every order.');
+      return;
+    }
+    if (orders.some((order) => !Number.isInteger(Number(order.totalAmount) || 0) || Number(order.totalAmount) < 0)) {
+      setMessage('Order totals must be whole, non-negative amounts.');
+      return;
+    }
+    if (!Number.isInteger(advance) || advance < 0) {
+      setMessage('The advance must be a whole, non-negative amount.');
+      return;
+    }
+    if (allocations.some((amount) => !Number.isInteger(amount))) {
+      setMessage('Allocations must be whole amounts.');
+      return;
+    }
+    if (allocatedAmount > advance) {
+      setMessage('Total allocations cannot exceed the advance received.');
+      return;
+    }
+    if (allocations.some((amount, index) => amount > (Number(orders[index].totalAmount) || 0))) {
+      setMessage('An order allocation cannot exceed that order’s stitching total.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     try {
@@ -167,6 +232,8 @@ export function NewOrderDialog({
         }
         const client = (await clientResponse.json()) as Client;
         clientId = client._id;
+        setSelectedClientId(clientId);
+        setClientMode('existing');
         setClients((current) => [
           client,
           ...current.filter((item) => item._id !== client._id),
@@ -174,28 +241,71 @@ export function NewOrderDialog({
       }
       if (!clientId) throw new Error('Select an existing client or add a new one.');
 
-      const orderResponse = await apiFetch(`${API}/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId,
-          garmentType: form.garmentType,
-          deliveryDate: new Date(form.deliveryDate).toISOString(),
-        }),
-      });
-      if (!orderResponse.ok) {
-        const body = await orderResponse.json().catch(() => null);
-        const details = Array.isArray(body?.message)
-          ? body.message.join(' ')
-          : typeof body?.message === 'string'
-            ? body.message
-            : 'Could not save the order.';
-        throw new Error(details);
+      const createdByKey = { ...createdOrderIds };
+      const createdOrders: Array<{ _id: string }> = [];
+      for (const order of orders) {
+        const alreadyCreated = createdByKey[order.key];
+        if (alreadyCreated) {
+          createdOrders.push({ _id: alreadyCreated });
+          continue;
+        }
+        const orderResponse = await apiFetch(`${API}/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId,
+            garmentType: order.garmentType,
+            deliveryDate: new Date(order.deliveryDate).toISOString(),
+            ...(order.totalAmount !== '' ? { totalAmount: Number(order.totalAmount) } : {}),
+          }),
+        });
+        if (!orderResponse.ok) {
+          const body = await orderResponse.json().catch(() => null);
+          const details = Array.isArray(body?.message)
+            ? body.message.join(' ')
+            : typeof body?.message === 'string'
+              ? body.message
+              : 'Could not save an order.';
+          throw new Error(
+            `${details}${createdOrders.length ? ` ${createdOrders.length} order(s) were already created; no combined payment was recorded.` : ''}`,
+          );
+        }
+        const savedOrder = (await orderResponse.json()) as { _id: string };
+        createdByKey[order.key] = savedOrder._id;
+        setCreatedOrderIds(createdByKey);
+        createdOrders.push(savedOrder);
+      }
+
+      if (advance > 0) {
+        const idempotencyKey = paymentIdempotencyKey || crypto.randomUUID();
+        setPaymentIdempotencyKey(idempotencyKey);
+        const paymentResponse = await apiFetch(`${API}/clients/${clientId}/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: advance,
+            idempotencyKey,
+            allocations: createdOrders.flatMap((order, index) =>
+              allocations[index] > 0
+                ? [{ orderId: order._id, amount: allocations[index] }]
+                : [],
+            ),
+          }),
+        });
+        if (!paymentResponse.ok) {
+          const body = await paymentResponse.json().catch(() => null);
+          const details = Array.isArray(body?.message)
+            ? body.message.join(' ')
+            : typeof body?.message === 'string'
+              ? body.message
+              : 'Orders were created, but the combined advance could not be recorded.';
+          throw new Error(`${details} Please check the customer payment history before retrying.`);
+        }
       }
 
       reset();
       setOpen(false);
-      setSuccess('Order created.');
+      setSuccess(`${createdOrders.length} order${createdOrders.length === 1 ? '' : 's'} created${advance > 0 ? ' and advance recorded' : ''}.`);
       onCreated?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Something went wrong.');
@@ -218,6 +328,7 @@ export function NewOrderDialog({
           setSuccess('');
           setMessage('');
           if (initialClient) {
+            setPaymentIdempotencyKey('');
             setClientMode('existing');
             setClientQuery('');
             setSelectedClientId(initialClient._id);
@@ -256,10 +367,10 @@ export function NewOrderDialog({
 
             <form onSubmit={submit} className="new-order-form">
               <div className="client-mode">
-                <button type="button" className={clientMode === 'existing' ? 'selected' : ''} onClick={() => { setClientMode('existing'); setMessage(''); }}>
+                <button type="button" className={clientMode === 'existing' ? 'selected' : ''} onClick={() => { setPaymentIdempotencyKey(''); setClientMode('existing'); setMessage(''); }}>
                   Existing client
                 </button>
-                <button type="button" className={clientMode === 'new' ? 'selected' : ''} onClick={() => { setClientMode('new'); setSelectedClientId(''); setMessage(''); }}>
+                <button type="button" className={clientMode === 'new' ? 'selected' : ''} onClick={() => { setPaymentIdempotencyKey(''); setClientMode('new'); setSelectedClientId(''); setMessage(''); }}>
                   New client
                 </button>
               </div>
@@ -274,6 +385,7 @@ export function NewOrderDialog({
                       onChange={(event) => {
                         setClientQuery(event.target.value);
                         setSelectedClientId('');
+                        setPaymentIdempotencyKey('');
                       }}
                       placeholder="Filter by name or phone number"
                     />
@@ -283,7 +395,7 @@ export function NewOrderDialog({
                     <select
                       value={selectedClientId}
                       required
-                      onChange={(event) => setSelectedClientId(event.target.value)}
+                      onChange={(event) => { setSelectedClientId(event.target.value); setPaymentIdempotencyKey(''); }}
                       disabled={clientsLoading || Boolean(clientError)}
                     >
                       <option value="">
@@ -323,67 +435,88 @@ export function NewOrderDialog({
                 </>
               )}
 
-              <label>
-                Garment type
-                <select
-                  value={addingGarmentType ? '__add_new__' : form.garmentType}
-                  required
-                  disabled={garmentTypesLoading}
-                  onChange={(event) => {
-                    if (event.target.value === '__add_new__') {
-                      setAddingGarmentType(true);
-                      setForm({ ...form, garmentType: '' });
-                    } else {
-                      setAddingGarmentType(false);
-                      setForm({ ...form, garmentType: event.target.value });
-                    }
-                  }}
-                >
-                  <option value="">{garmentTypesLoading ? 'Loading garment types…' : 'Select a garment type'}</option>
-                  {garmentTypes.map((type) => <option value={type} key={type}>{type}</option>)}
-                  <option value="__add_new__">＋ Add new garment type…</option>
-                </select>
-              </label>
-
-              {addingGarmentType && (
-                <div className="new-garment-type">
-                  <label>
-                    New garment type
-                    <input
-                      autoFocus
-                      maxLength={80}
-                      value={newGarmentType}
-                      onChange={(event) => setNewGarmentType(event.target.value)}
-                      placeholder="e.g. Bridal blouse"
-                    />
-                  </label>
-                  <div className="garment-type-actions">
-                    <button type="button" onClick={saveGarmentType} disabled={saving || !newGarmentType.trim()}>
-                      {saving ? 'Saving…' : 'Save type'}
-                    </button>
-                    <button type="button" onClick={() => { setAddingGarmentType(false); setNewGarmentType(''); }} disabled={saving}>
-                      Cancel
-                    </button>
-                  </div>
+              <section className="visit-orders" aria-label="Orders in this visit">
+                <div className="visit-orders-heading">
+                  <div><h3>Stitching orders</h3><span>{orders.length} order{orders.length === 1 ? '' : 's'}</span></div>
+                  <button type="button" onClick={() => { setPaymentIdempotencyKey(''); setOrders((current) => [...current, blankOrder()]); }}>＋ Add order</button>
                 </div>
-              )}
+                {orders.map((order, index) => (
+                  <article className="visit-order" key={order.key}>
+                    <div className="visit-order-heading">
+                      <strong>Order {index + 1}</strong>
+                      {orders.length > 1 && <button type="button" aria-label={`Remove order ${index + 1}`} onClick={() => {
+                        setPaymentIdempotencyKey('');
+                        setOrders((current) => current.filter((_, itemIndex) => itemIndex !== index));
+                        setAddingGarmentType(false);
+                        setNewGarmentTypeIndex(null);
+                      }}>Remove</button>}
+                    </div>
+                    <label>Garment type
+                      <select value={newGarmentTypeIndex === index ? '__add_new__' : order.garmentType}
+                        required disabled={garmentTypesLoading}
+                        onChange={(event) => {
+                          if (event.target.value === '__add_new__') {
+                            setAddingGarmentType(true);
+                            setNewGarmentTypeIndex(index);
+                            updateOrder(index, { garmentType: '' });
+                          } else {
+                            setAddingGarmentType(false);
+                            setNewGarmentTypeIndex(null);
+                            updateOrder(index, { garmentType: event.target.value });
+                          }
+                        }}>
+                        <option value="">{garmentTypesLoading ? 'Loading garment types…' : 'Select a garment type'}</option>
+                        {garmentTypes.map((type) => <option value={type} key={type}>{type}</option>)}
+                        <option value="__add_new__">＋ Add new garment type…</option>
+                      </select>
+                    </label>
+                    {addingGarmentType && newGarmentTypeIndex === index && (
+                      <div className="new-garment-type">
+                        <label>New garment type<input autoFocus maxLength={80} value={newGarmentType} onChange={(event) => setNewGarmentType(event.target.value)} placeholder="e.g. Bridal blouse" /></label>
+                        <div className="garment-type-actions">
+                          <button type="button" onClick={saveGarmentType} disabled={saving || !newGarmentType.trim()}>{saving ? 'Saving…' : 'Save type'}</button>
+                          <button type="button" onClick={() => { setAddingGarmentType(false); setNewGarmentType(''); setNewGarmentTypeIndex(null); }} disabled={saving}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="visit-order-fields">
+                      <label>Delivery date<input type="date" value={order.deliveryDate} required onChange={(event) => updateOrder(index, { deliveryDate: event.target.value })} /></label>
+                      <label>Stitching total (₹)<input type="number" min="0" step="1" value={order.totalAmount} onChange={(event) => updateOrder(index, { totalAmount: event.target.value })} /></label>
+                    </div>
+                  </article>
+                ))}
+                <div className="visit-total"><span>Total stitching amount</span><strong>₹{orderTotal.toLocaleString('en-IN')}</strong></div>
+              </section>
 
-              <label>
-                Delivery date
-                <input
-                  type="date"
-                  value={form.deliveryDate}
-                  required
-                  onChange={(event) => setForm({ ...form, deliveryDate: event.target.value })}
-                />
-              </label>
+              <section className="visit-payment">
+                <h3>Combined advance</h3>
+                <label>Amount received (₹)<input type="number" min="0" step="1" value={advanceAmount} onChange={(event) => { setAdvanceAmount(event.target.value); setPaymentIdempotencyKey(''); }} placeholder="0" /></label>
+                <div className="allocation-mode">
+                  <button type="button" className={allocationMode === 'automatic' ? 'selected' : ''} onClick={() => { setAllocationMode('automatic'); setPaymentIdempotencyKey(''); }}>Allocate automatically</button>
+                  <button type="button" className={allocationMode === 'manual' ? 'selected' : ''} onClick={() => { setAllocationMode('manual'); setPaymentIdempotencyKey(''); }}>Allocate manually</button>
+                </div>
+                {orders.map((order, index) => (
+                  <div className="allocation-row" key={`allocation-${index}`}>
+                    <span>Order {index + 1} · {order.garmentType || 'Select garment'}</span>
+                    {allocationMode === 'manual'
+                      ? <input aria-label={`Allocation for order ${index + 1}`} type="number" min="0" step="1" max={order.totalAmount || 0} value={order.allocation} onChange={(event) => updateOrder(index, { allocation: event.target.value })} />
+                      : <strong>₹{allocations[index].toLocaleString('en-IN')}</strong>}
+                    <small>Balance after payment: ₹{Math.max(0, (Number(order.totalAmount) || 0) - allocations[index]).toLocaleString('en-IN')}</small>
+                  </div>
+                ))}
+                <div className="allocation-summary">
+                  <span>Allocated <strong>₹{allocatedAmount.toLocaleString('en-IN')}</strong></span>
+                  <span>Unallocated <strong>₹{unallocatedAmount.toLocaleString('en-IN')}</strong></span>
+                </div>
+                {allocatedAmount > advance && <p className="new-order-error" role="alert">Allocations cannot exceed the received amount.</p>}
+              </section>
 
               {message && <p className="new-order-message" role="status">{message}</p>}
               <button
                 className="primary"
-                disabled={saving || addingGarmentType || !form.garmentType || (clientMode === 'existing' && !selectedClientId)}
+                disabled={saving || addingGarmentType || orders.some((order) => !order.garmentType || !order.deliveryDate) || (clientMode === 'existing' && !selectedClientId) || allocatedAmount > advance}
               >
-                {saving ? 'Saving…' : 'Create order'}
+                {saving ? 'Saving visit…' : `Create ${orders.length > 1 ? `${orders.length} orders` : 'order'}${advance > 0 ? ' & record advance' : ''}`}
               </button>
             </form>
           </section>

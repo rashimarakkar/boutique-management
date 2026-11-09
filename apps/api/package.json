@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "test": "node --test --require ts-node/register src/payments/payment.utils.spec.ts src/payments/payments.service.spec.ts",
     "start": "node dist/main"
   },
   "dependencies": {

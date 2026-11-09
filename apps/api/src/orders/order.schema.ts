@@ -15,6 +15,9 @@ const MeasurementSchema = SchemaFactory.createForClass(Measurement);
 
 @Schema({ timestamps: true })
 export class Order {
+  createdAt?: Date;
+  updatedAt?: Date;
+
   @Prop({ type: Types.ObjectId, ref: Client.name, required: true, index: true }) clientId!: Types.ObjectId;
   @Prop({ required: true, trim: true }) garmentType!: string;
   @Prop({ trim: true }) description?: string;
@@ -27,6 +30,8 @@ export class Order {
   @Prop() sketchUrl?: string;
   @Prop({ min: 0 }) totalAmount?: number;
   @Prop({ min: 0, default: 0 }) advancePaid!: number;
+  @Prop({ min: 0 }) paidAmount?: number;
+  @Prop({ min: 0 }) legacyPaidAmount?: number;
   @Prop({ trim: true }) notes?: string;
 }
 export const OrderSchema = SchemaFactory.createForClass(Order);
