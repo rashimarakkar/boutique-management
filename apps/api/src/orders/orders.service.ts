@@ -85,11 +85,24 @@ export class OrdersService {
     skip: number;
     limit: number;
   }> {
-    const { status, view, q, skip = 0, limit = 20 } = query;
+    const { status, view, q, startDate, endDate, skip = 0, limit = 20 } = query;
     const now = new Date();
     const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
     const active = { $nin: [OrderStatus.DELIVERED, OrderStatus.CANCELLED] };
     const filter: Record<string, unknown> = status ? { status } : {};
+    if (startDate && endDate && startDate > endDate) {
+      throw new BadRequestException('End date must be on or after start date');
+    }
+    if (startDate || endDate) {
+      const createdAt: Record<string, Date> = {};
+      if (startDate) createdAt.$gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) {
+        const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
+        endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+        createdAt.$lt = endExclusive;
+      }
+      filter.createdAt = createdAt;
+    }
     if (!status) {
       if (view === 'pending') filter.status = active;
       if (view === 'delivered') filter.status = OrderStatus.DELIVERED;

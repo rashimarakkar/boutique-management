@@ -38,6 +38,36 @@ type OrderPage = {
 const PAGE_SIZES = [10, 20, 50];
 const EXPORT_PAGE_SIZE = 100;
 
+type DateFilter = 'all' | 'current_month' | 'previous_month' | 'custom';
+
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const addDateFilterParams = (
+  params: URLSearchParams,
+  dateFilter: DateFilter,
+  dateFrom: string,
+  dateTo: string,
+) => {
+  if (dateFilter === 'custom') {
+    if (dateFrom) params.set('startDate', dateFrom);
+    if (dateTo) params.set('endDate', dateTo);
+    return;
+  }
+  if (dateFilter === 'all') return;
+
+  const offset = dateFilter === 'current_month' ? 0 : -1;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  params.set('startDate', toDateInputValue(start));
+  params.set('endDate', toDateInputValue(end));
+};
+
 const labelForStatus = (status: string) =>
   status.replaceAll('_', ' ');
 const escapeHtml = (value: string) =>
@@ -46,6 +76,9 @@ const escapeHtml = (value: string) =>
 
 export default function OrdersPage() {
   const [view, setView] = useState('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [orders, setOrders] = useState<Order[] | null>(null);
@@ -70,6 +103,7 @@ export default function OrdersPage() {
 
     if (view !== 'all') params.set('view', view);
     if (submittedSearch) params.set('q', submittedSearch);
+    addDateFilterParams(params, dateFilter, dateFrom, dateTo);
     params.set('skip', String(skip));
     params.set('limit', String(limit));
 
@@ -97,7 +131,7 @@ export default function OrdersPage() {
         );
       });
     return () => controller.abort();
-  }, [view, submittedSearch, skip, limit, refreshVersion]);
+  }, [view, dateFilter, dateFrom, dateTo, submittedSearch, skip, limit, refreshVersion]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -133,6 +167,7 @@ export default function OrdersPage() {
         const params = new URLSearchParams();
         if (view !== 'all') params.set('view', view);
         if (submittedSearch) params.set('q', submittedSearch);
+        addDateFilterParams(params, dateFilter, dateFrom, dateTo);
         params.set('skip', String(exportSkip));
         params.set('limit', String(EXPORT_PAGE_SIZE));
 
@@ -163,7 +198,14 @@ export default function OrdersPage() {
         </tr>`;
       }).join('');
       const filterLabel = filters.find(([value]) => value === view)?.[1] ?? 'All orders';
-      const title = `Orders - ${filterLabel}${submittedSearch ? ` - ${submittedSearch}` : ''}`;
+      const dateLabel = dateFilter === 'current_month'
+        ? 'Current month'
+        : dateFilter === 'previous_month'
+          ? 'Previous month'
+          : dateFilter === 'custom'
+            ? `Date range${dateFrom || dateTo ? ` - ${dateFrom || '…'} to ${dateTo || '…'}` : ''}`
+            : '';
+      const title = `Orders - ${filterLabel}${dateLabel ? ` - ${dateLabel}` : ''}${submittedSearch ? ` - ${submittedSearch}` : ''}`;
 
       printWindow.document.open();
       printWindow.document.write(`<!doctype html>
@@ -186,7 +228,7 @@ export default function OrdersPage() {
           </head>
           <body>
             <h1>Hamiz Boutique — Orders</h1>
-            <p class="meta">${escapeHtml(filterLabel)}${submittedSearch ? ` · Search: ${escapeHtml(submittedSearch)}` : ''} · ${allOrders.length} orders · Exported ${escapeHtml(new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date()))}</p>
+            <p class="meta">${escapeHtml(filterLabel)}${dateLabel ? ` · ${escapeHtml(dateLabel)}` : ''}${submittedSearch ? ` · Search: ${escapeHtml(submittedSearch)}` : ''} · ${allOrders.length} orders · Exported ${escapeHtml(new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date()))}</p>
             <table>
               <thead><tr><th>Client</th><th>Phone</th><th>Garment</th><th>Delivery</th><th>Status</th><th>Billed</th><th>Collected</th><th>Due</th></tr></thead>
               <tbody>${rows}</tbody>
@@ -253,6 +295,52 @@ export default function OrdersPage() {
             Search
           </button>
         </form>
+
+        <div className={styles.dateFilters}>
+          <label className={styles.dateFilter}>
+            Order date
+            <select
+              value={dateFilter}
+              onChange={(event) => {
+                setDateFilter(event.target.value as DateFilter);
+                setSkip(0);
+              }}
+            >
+              <option value="all">All dates</option>
+              <option value="current_month">Current month</option>
+              <option value="previous_month">Previous month</option>
+              <option value="custom">Date range</option>
+            </select>
+          </label>
+          {dateFilter === 'custom' && (
+            <div className={styles.dateRange}>
+              <label>
+                From
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(event) => {
+                    setDateFrom(event.target.value);
+                    setSkip(0);
+                  }}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(event) => {
+                    setDateTo(event.target.value);
+                    setSkip(0);
+                  }}
+                />
+              </label>
+            </div>
+          )}
+        </div>
 
         <div className={styles.filterRow}>
           {filters.map(([value, label]) => (
