@@ -49,6 +49,23 @@
   background: #fff;
 }
 
+.categoryCard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #dfd4c6;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #fffdfa 0%, #f5f0e9 100%);
+  box-shadow: 0 8px 24px rgba(73, 60, 43, 0.06);
+}
+
+.categoryCard::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: #a18b70;
+  content: '';
+}
+
 .totalCard {
   display: flex;
   align-items: center;
@@ -92,6 +109,14 @@
   margin: 0 0 18px;
   color: #343930;
   font: 700 22px 'Playfair Display', serif;
+}
+
+.categoryCard h2 {
+  margin-bottom: 6px;
+}
+
+.categoryCard > h2 + .categoryForm {
+  margin-top: 16px;
 }
 
 .form {
@@ -213,7 +238,7 @@
 
 .categoryList {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   margin: 16px 0 0;
   padding: 0;
   list-style: none;
@@ -224,14 +249,55 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-top: 1px solid #eee9e3;
-  padding-top: 9px;
+  min-height: 48px;
+  border: 1px solid #ece4d9;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 7px 8px 7px 12px;
   color: #343930;
   font-size: 13px;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+
+.categoryList li:hover {
+  transform: translateY(-1px);
+  border-color: #d3c3ae;
+  box-shadow: 0 4px 12px rgba(73, 60, 43, 0.06);
+}
+
+.categoryList li > span {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .categoryList .rowActions {
   flex-shrink: 0;
+  gap: 6px;
+}
+
+.categoryList .editButton,
+.categoryList .deleteButton {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.categoryList .editButton:hover {
+  border-color: #c6b59e;
+  background: #f0e9df;
+}
+
+.categoryList .deleteButton:hover {
+  border-color: #dfb9b1;
+  background: #faece9;
+}
+
+.categoryCard button:focus-visible {
+  outline: 2px solid #a18b70;
+  outline-offset: 2px;
 }
 
 .tableHeader,
