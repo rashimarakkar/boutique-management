@@ -74,6 +74,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
       <div className="auth-controls">
         {error && <span role="alert">{error}</span>}
         {pathname === '/' && <Link className="auth-nav-link" href="/clients">View clients</Link>}
+        {pathname === '/' && <Link className="auth-nav-link" href="/expenses">Expenses</Link>}
         <button onClick={logout} disabled={loggingOut}>
           {loggingOut ? 'Signing out…' : 'Log out'}
         </button>

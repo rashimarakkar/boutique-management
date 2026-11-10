@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { CSSProperties, useCallback, useEffect, useState } from 'react';
 import { NewOrderDialog } from './components/new-order-dialog';
 import { API, apiFetch } from './lib/api';
+import styles from './dashboard.module.css';
 
 type Summary = {
   pending: number;
@@ -17,6 +18,8 @@ type Summary = {
     ordersWithPending: number;
     unallocated: number;
   };
+  expenses: { total: number };
+  cashProfit: number;
   upcoming: Array<{
     _id: string;
     garmentType: string;
@@ -70,7 +73,7 @@ export default function Home() {
             <span>View payment dues</span><span className="payment-dues-arrow" aria-hidden="true">→</span>
           </Link>
         </div>
-        <div className="metrics accounts-metrics">
+        <div className={`metrics accounts-metrics ${styles.accountsMetrics}`}>
           <MoneyMetric label="Total billed" value={summary?.accounts.billed} tone="sand" href="/orders" />
           <MoneyMetric label="Amount received" value={summary?.accounts.received} tone="sage" href="/orders?view=received" />
           <MoneyMetric
@@ -80,6 +83,8 @@ export default function Home() {
             href="/orders?view=payment_due"
           />
           <MoneyMetric label="Unallocated advance" value={summary?.accounts.unallocated} tone="sand" href="/clients" />
+          <MoneyMetric label="Total expenses" value={summary?.expenses.total} tone="rose" href="/expenses" />
+          <MoneyMetric label="Net cash profit · all time" value={summary?.cashProfit} tone="sand" href="/expenses" />
         </div>
       </section>
       <section className="grid">
@@ -135,9 +140,15 @@ function Metric({
   tone: string;
   href: string;
 }) {
+  const formattedValue = value ?? '—';
+  const valueStyle = {
+    '--amount-length': String(formattedValue).length,
+    '--label-length': label.length,
+  } as CSSProperties;
+
   return (
-    <Link href={href} className={`metric ${tone}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <span>{label}</span><strong>{value ?? '—'}</strong>
+    <Link href={href} className={`metric ${tone} ${styles.dashboardMetric}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+      <span>{label}</span><strong style={valueStyle}>{formattedValue}</strong>
     </Link>
   );
 }
@@ -153,10 +164,16 @@ function MoneyMetric({
   tone: string;
   href: string;
 }) {
+  const formattedValue = value === undefined ? '—' : `₹${value.toLocaleString('en-IN')}`;
+  const amountStyle = {
+    '--amount-length': String(formattedValue).length,
+    '--label-length': label.length,
+  } as CSSProperties;
+
   return (
-    <Link href={href} className={`metric ${tone}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link href={href} className={`metric ${tone} ${styles.dashboardMetric}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <span>{label}</span>
-      <strong>{value === undefined ? '—' : `₹${value.toLocaleString('en-IN')}`}</strong>
+      <strong style={amountStyle}>{formattedValue}</strong>
     </Link>
   );
 }

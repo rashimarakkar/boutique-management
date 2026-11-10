@@ -3,18 +3,20 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Order, OrderDocument, OrderStatus } from '../orders/order.schema';
 import { CustomerPayment, PaymentDocument } from '../payments/payment.schema';
+import { Expense, ExpenseDocument } from '../expenses/expense.schema';
 
 @Injectable()
 export class DashboardService {
   constructor(
     @InjectModel(Order.name) private readonly orders: Model<OrderDocument>,
     @InjectModel(CustomerPayment.name) private readonly payments: Model<PaymentDocument>,
+    @InjectModel(Expense.name) private readonly expenses: Model<ExpenseDocument>,
   ) {}
   async summary() {
     const now = new Date();
     const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
     const active = { $nin: [OrderStatus.DELIVERED, OrderStatus.CANCELLED] };
-    const [pending, delivered, overdue, dueToday, upcoming, accountRows, paymentRows] = await Promise.all([
+    const [pending, delivered, overdue, dueToday, upcoming, accountRows, paymentRows, expenseRows] = await Promise.all([
       this.orders.countDocuments({ status: active }),
       this.orders.countDocuments({ status: OrderStatus.DELIVERED }),
       this.orders.countDocuments({ status: active, deliveryDate: { $lt: now } }),
@@ -62,6 +64,9 @@ export class DashboardService {
           },
         },
       ]),
+      this.expenses.aggregate([
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
     ]);
     const orderAccounts = accountRows[0] ?? { billed: 0, allocated: 0, pending: 0, ordersWithPending: 0 };
     const paymentTotals = paymentRows[0] ?? { received: 0, allocated: 0 };
@@ -73,6 +78,15 @@ export class DashboardService {
       ordersWithPending: orderAccounts.ordersWithPending,
       unallocated,
     };
-    return { pending, delivered, overdue, dueToday, upcoming, accounts };
+    return {
+      pending,
+      delivered,
+      overdue,
+      dueToday,
+      upcoming,
+      accounts,
+      expenses: { total: expenseRows[0]?.total ?? 0 },
+      cashProfit: paymentTotals.received - (expenseRows[0]?.total ?? 0),
+    };
   }
 }
