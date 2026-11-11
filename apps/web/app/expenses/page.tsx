@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { API, apiFetch } from '../lib/api';
+import { Breadcrumbs } from '../components/breadcrumbs';
 import styles from './expenses.module.css';
 
 type Expense = {
@@ -287,9 +288,9 @@ export default function ExpensesPage() {
 
   return (
     <main className={styles.page}>
+      <Breadcrumbs items={[{ label: 'Dashboard', href: '/' }, { label: 'Expenses' }]} />
       <header className={styles.header}>
         <div>
-          <Link href="/" className={styles.backLink}>← Dashboard</Link>
           <p className={styles.eyebrow}>BUSINESS ACCOUNTS</p>
           <h1>Expenses</h1>
           <p className={styles.subtitle}>Record and organize your boutique expenses.</p>

@@ -87,6 +87,82 @@
   font-size: 13px;
 }
 
+.editButton,
+.cancelEditButton {
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 17px;
+  font: 600 13px 'DM Sans', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.editButton {
+  background: #343930;
+  color: #fff;
+}
+
+.editButton:disabled,
+.cancelEditButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cancelEditButton {
+  border: 1px solid #d8d0c5;
+  background: #fff;
+  color: #554e45;
+}
+
+.clientEditForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 18px;
+  border: 1px solid #e9e2d9;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.clientEditForm label {
+  display: grid;
+  gap: 7px;
+  color: #514b45;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clientEditForm input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d9d2ca;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #fffcf9;
+  color: #292725;
+  font: 400 15px 'DM Sans', sans-serif;
+}
+
+.clientEditForm input:focus {
+  outline: 2px solid #bd9e7e;
+  border-color: transparent;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.editSuccess {
+  margin: -8px 0 16px;
+  color: #456b42;
+  font-size: 13px;
+}
+
 .search {
   display: flex;
   gap: 10px;
@@ -452,6 +528,14 @@
 
   .metrics {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .clientEditForm {
+    grid-template-columns: 1fr;
+  }
+
+  .editActions {
+    grid-column: auto;
   }
 
   .metric {

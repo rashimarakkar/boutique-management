@@ -74,6 +74,9 @@ export class CustomerPayment {
   @Prop({ type: Types.ObjectId, ref: Client.name, required: true, index: true })
   clientId!: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Invoice', index: true })
+  invoiceId?: Types.ObjectId;
+
   @Prop({ required: true, min: 1 })
   amount!: number;
 
@@ -110,3 +113,4 @@ export class CustomerPayment {
 export const CustomerPaymentSchema = SchemaFactory.createForClass(CustomerPayment);
 CustomerPaymentSchema.index({ clientId: 1, idempotencyKey: 1 }, { unique: true });
 CustomerPaymentSchema.index({ 'allocations.orderId': 1, receivedAt: -1 });
+CustomerPaymentSchema.index({ invoiceId: 1, receivedAt: -1 });

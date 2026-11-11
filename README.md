@@ -15,7 +15,7 @@ The API runs on `http://localhost:3001`. `docker-compose.yml` remains available 
 ## First delivery scope
 
 - Private owner/staff workspace (no client accounts)
-- Searchable client directory and client profiles with order history, payment totals, and status summaries
+- Searchable client directory and client profiles with order history, invoice balances, and status summaries
 - Create orders for existing clients or add a new client during order entry
 - Select saved garment types or add new types for future orders
 - Flexible measurements per order
@@ -43,11 +43,14 @@ Order photos and sketches are stored as files in `apps/api/uploads` by default, 
 
 ## Payments
 
-Payments are recorded against a client and can be allocated to one or more of that client's orders. An allocation may use part of a payment; any remainder stays unallocated and can be assigned later. Order responses include `paidAmount` and `balanceAmount`, calculated from the allocation ledger. Existing per-order `advancePaid` updates are retained as payment entries; reductions are recorded as allocation reversals. Existing advances are imported into the history when that history is accessed.
+Record all new payments against an invoice—do not record a separate payment against an order or client. Orders contain work details and an optional estimate; invoice totals, receipts, and balances are the billing source of truth. A client invoice may contain multiple orders, and an order may be billed on only one invoice.
 
-- `POST /api/clients/:clientId/payments` records a receipt. Send a unique `idempotencyKey` with the amount, optional method/reference/date/notes, and optional `allocations: [{ "orderId": "...", "amount": 500 }]`.
-- `GET /api/clients/:clientId/payments` returns customer payment history and each payment's unallocated amount.
-- `GET /api/orders/:orderId/payments` returns the payment allocations for an order.
-- `POST /api/payments/:paymentId/allocations` allocates a later portion of a payment. Include a unique `idempotencyKey` for the allocation request and an `allocations` array.
+Existing order/client payment records are retained as historical data and are not automatically transferred to invoices. They do not reduce a new invoice's balance; reconcile any earlier receipts before entering them again. Order/client pages show invoice information without offering another payment-entry path. Legacy payment read endpoints remain for historical lookup; client-level payment creation and payment allocation endpoints are no longer available.
 
-Payment DTOs accept whole rupees. Allocations are transactionally checked against both the payment's unallocated amount and the order's remaining balance. MongoDB transactions require a replica set; MongoDB Atlas supports this, while a standalone local MongoDB container does not.
+## Invoices
+
+Create and view multi-item client invoices from **Invoices** in the web app. Invoice numbers use `INV-YYYY-NNN`; a per-year MongoDB counter assigns sequence numbers atomically, so concurrent invoice creation does not reuse a number. Invoice items may reference existing orders or be entered as custom items.
+
+Invoices begin as drafts. Mark an invoice as sent after sharing it; recording a full or partial receipt updates its status to paid or partial, and unpaid sent invoices past their due date display as overdue. Record invoice receipts at `POST /api/invoices/:id/payments`; these update the invoice balance and are stored in the customer's payment history. The dashboard and client account summarize billed, paid, and due amounts from invoices.
+
+The invoice detail page generates a branded PDF. On devices that support sharing files, **Share PDF on WhatsApp** opens the system share sheet with the PDF attached. Otherwise, it downloads the PDF and opens WhatsApp with a message; attach the downloaded PDF manually before sending. WhatsApp's `wa.me` web link cannot attach documents itself.

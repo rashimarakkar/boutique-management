@@ -19,7 +19,6 @@ export class CreateOrderDto {
   @IsOptional() @IsArray() @ArrayMaxSize(4) @IsString({ each: true }) @MaxLength(1500000, { each: true }) imageUrls?: string[];
   @IsOptional() @IsString() @MaxLength(1500000) sketchUrl?: string;
   @IsOptional() @IsNumber() @Min(0) totalAmount?: number;
-  @IsOptional() @IsNumber() @Min(0) advancePaid?: number;
   @IsOptional() @IsString() notes?: string;
 }
 export class UpdateOrderDto {
@@ -33,6 +32,5 @@ export class UpdateOrderDto {
   @IsOptional() @IsArray() @ArrayMaxSize(4) @IsString({ each: true }) @MaxLength(1500000, { each: true }) imageUrls?: string[];
   @IsOptional() @IsString() @MaxLength(1500000) sketchUrl?: string | null;
   @IsOptional() @IsNumber() @Min(0) totalAmount?: number;
-  @IsOptional() @IsNumber() @Min(0) advancePaid?: number;
   @IsOptional() @IsString() notes?: string;
 }

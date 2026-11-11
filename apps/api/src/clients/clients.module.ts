@@ -5,5 +5,6 @@ import { Order, OrderSchema } from '../orders/order.schema';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { CustomerPayment, CustomerPaymentSchema } from '../payments/payment.schema';
-@Module({ imports: [MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }, { name: Order.name, schema: OrderSchema }, { name: CustomerPayment.name, schema: CustomerPaymentSchema }])], controllers: [ClientsController], providers: [ClientsService], exports: [MongooseModule] })
+import { Invoice, InvoiceSchema } from '../invoices/invoice.schema';
+@Module({ imports: [MongooseModule.forFeature([{ name: Client.name, schema: ClientSchema }, { name: Order.name, schema: OrderSchema }, { name: CustomerPayment.name, schema: CustomerPaymentSchema }, { name: Invoice.name, schema: InvoiceSchema }])], controllers: [ClientsController], providers: [ClientsService], exports: [MongooseModule] })
 export class ClientsModule {}

@@ -7,6 +7,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AuthModule } from './auth/auth.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ExpensesModule } from './expenses/expenses.module';
+import { InvoicesModule } from './invoices/invoices.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ExpensesModule } from './expenses/expenses.module';
     DashboardModule,
     PaymentsModule,
     ExpensesModule,
+    InvoicesModule,
     AuthModule,
   ],
 })

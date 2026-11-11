@@ -247,10 +247,16 @@
 }
 
 .paymentRecord {
+  display: block;
   padding: 15px 20px;
   border-bottom: 1px solid #eee9e3;
   color: #82796f;
   font-size: 12px;
+  text-decoration: none;
+}
+
+.paymentRecord:hover {
+  background: #fbf8f3;
 }
 
 .paymentRecord:last-child {

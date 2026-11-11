@@ -1,11 +1,12 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client, ClientDocument } from './client.schema';
-import { CreateClientDto } from './dto';
+import { CreateClientDto, UpdateClientDto } from './dto';
 import { Order, OrderDocument, OrderStatus } from '../orders/order.schema';
 import { ListClientsQueryDto } from './list-clients-query.dto';
 import { CustomerPayment, PaymentDocument } from '../payments/payment.schema';
+import { Invoice, InvoiceDocument } from '../invoices/invoice.schema';
 
 @Injectable()
 export class ClientsService {
@@ -13,8 +14,23 @@ export class ClientsService {
     @InjectModel(Client.name) private readonly model: Model<ClientDocument>,
     @InjectModel(Order.name) private readonly orders: Model<OrderDocument>,
     @InjectModel(CustomerPayment.name) private readonly payments: Model<PaymentDocument>,
+    @InjectModel(Invoice.name) private readonly invoices: Model<InvoiceDocument>,
   ) {}
   create(dto: CreateClientDto) { return this.model.create(dto); }
+  async update(id: string, dto: UpdateClientDto) {
+    const name = dto.name.trim();
+    const phone = dto.phone.trim();
+    if (!name || !phone) {
+      throw new BadRequestException('Client name and mobile number are required');
+    }
+    const client = await this.model.findByIdAndUpdate(
+      id,
+      { name, phone },
+      { new: true, runValidators: true },
+    ).lean();
+    if (!client) throw new NotFoundException('Client not found');
+    return client;
+  }
   findAll(query = '') {
     const term = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const match = term ? new RegExp(term, 'i') : null;
@@ -65,35 +81,21 @@ export class ClientsService {
           deliveryDate: 1,
           status: 1,
           totalAmount: 1,
-          advancePaid: 1,
-          paidAmount: 1,
         })
         .sort({ deliveryDate: -1, _id: -1 })
         .toArray(),
-      this.orders.aggregate<{
+      this.invoices.aggregate<{
         totalBilled: number;
         totalCollected: number;
         totalDue: number;
       }>([
-        { $match: { clientId: { $in: clientIds }, status: { $ne: OrderStatus.CANCELLED } } },
+        { $match: { clientId: client._id } },
         {
           $group: {
             _id: null,
-            totalBilled: { $sum: { $ifNull: ['$totalAmount', 0] } },
-            totalCollected: { $sum: { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] } },
-            totalDue: {
-              $sum: {
-                $max: [
-                  0,
-                  {
-                    $subtract: [
-                      { $ifNull: ['$totalAmount', 0] },
-                      { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] },
-                    ],
-                  },
-                ],
-              },
-            },
+            totalBilled: { $sum: '$total' },
+            totalCollected: { $sum: '$paidAmount' },
+            totalDue: { $sum: '$balanceAmount' },
           },
         },
       ]),
@@ -110,14 +112,7 @@ export class ClientsService {
 
     return {
       client,
-      orders: orders.map((order) => {
-        const paidAmount = order.paidAmount ?? order.advancePaid ?? 0;
-        return {
-          ...order,
-          paidAmount,
-          balanceAmount: Math.max(0, (order.totalAmount ?? 0) - paidAmount),
-        };
-      }),
+      orders,
       summary: {
         totalOrders: orders.length,
         totalBilled: financialRows[0]?.totalBilled ?? 0,

@@ -24,9 +24,6 @@ export class OrdersService {
   async create(dto: CreateOrderDto) {
     const order = new this.model({
       ...dto,
-      advancePaid: 0,
-      paidAmount: 0,
-      legacyPaidAmount: 0,
     });
     const media = await this.mediaStorage.persistOrderMedia(
       order._id.toString(),
@@ -38,12 +35,8 @@ export class OrdersService {
       order.sketchUrl = media.sketchUrl;
     }
     try {
-      if ((dto.advancePaid ?? 0) > 0) {
-        const saved = await this.paymentsService.createOrderWithLegacyAdvance(order, dto.advancePaid!);
-        return this.withFinancialAmounts(saved.toObject());
-      }
       const saved = await order.save();
-      return this.withFinancialAmounts(saved.toObject());
+      return this.withoutLegacyPaymentFields(saved.toObject());
     } catch (error) {
       await this.mediaStorage.removeFiles(media.createdFiles);
       throw error;
@@ -108,13 +101,6 @@ export class OrdersService {
       if (view === 'delivered') filter.status = OrderStatus.DELIVERED;
       if (view === 'overdue') { filter.status = active; filter.deliveryDate = { $lt: now }; }
       if (view === 'due_today') { filter.status = active; filter.deliveryDate = { $gte: now, $lte: todayEnd }; }
-      if (view === 'payment_due') filter.$expr = {
-        $gt: [
-          { $subtract: [{ $ifNull: ['$totalAmount', 0] }, { $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] }] },
-          0,
-        ],
-      };
-      if (view === 'received') filter.$expr = { $gt: [{ $ifNull: ['$paidAmount', { $ifNull: ['$advancePaid', 0] }] }, 0] };
     }
     if (q?.trim()) {
       const term = q.trim(); const match = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -130,7 +116,7 @@ export class OrdersService {
       this.model.countDocuments(filter),
     ]);
     return {
-      data: data.map((order) => this.withFinancialAmounts(order)),
+      data: data.map((order) => this.withoutLegacyPaymentFields(order)),
       total,
       skip,
       limit,
@@ -161,38 +147,21 @@ export class OrdersService {
       .populate('clientId', 'name phone email address notes')
       .lean();
     if (!result) throw new NotFoundException('Order not found');
-    return this.withFinancialAmounts(result);
+    return this.withoutLegacyPaymentFields(result);
   }
   async update(id: string, dto: UpdateOrderDto) {
     const existing = await this.model.findById(id).exec();
     if (!existing) throw new NotFoundException('Order not found');
-    const paidAmount = existing.paidAmount ?? existing.advancePaid ?? 0;
-    if (dto.totalAmount !== undefined && dto.totalAmount < paidAmount) {
-      throw new BadRequestException('Order total cannot be less than the amount already paid');
-    }
-    if (dto.advancePaid !== undefined) {
-      await this.paymentsService.recordLegacyOrderAdvance(id, dto.advancePaid);
-    }
     const media = await this.mediaStorage.persistOrderMedia(
       existing._id.toString(),
       dto.imageUrls ?? existing.imageUrls ?? [],
       dto.sketchUrl === undefined ? existing.sketchUrl : dto.sketchUrl,
     );
-    const { advancePaid: _legacyAdvancePaid, ...orderFields } = dto;
     const filter: Record<string, unknown> = { _id: id };
-    if (dto.totalAmount !== undefined) {
-      filter.$or = [
-        { paidAmount: { $lte: dto.totalAmount } },
-        { paidAmount: { $exists: false }, advancePaid: { $lte: dto.totalAmount } },
-        { paidAmount: null, advancePaid: { $lte: dto.totalAmount } },
-        { paidAmount: { $exists: false }, advancePaid: { $exists: false } },
-        { paidAmount: null, advancePaid: { $exists: false } },
-      ];
-    }
     const order = await this.model.findOneAndUpdate(
       filter,
       {
-        ...orderFields,
+        ...dto,
         imageUrls: media.imageUrls,
         sketchUrl: media.sketchUrl,
       },
@@ -200,16 +169,13 @@ export class OrdersService {
     );
     if (!order) {
       await this.mediaStorage.removeFiles(media.createdFiles);
-      if (dto.totalAmount !== undefined && await this.model.exists({ _id: id })) {
-        throw new ConflictException('Order total cannot be less than the amount already paid');
-      }
       throw new NotFoundException('Order not found');
     }
     await this.mediaStorage.removeUnreferencedFiles(order._id.toString(), [
       ...media.imageUrls,
       ...(media.sketchUrl ? [media.sketchUrl] : []),
     ]);
-    return this.withFinancialAmounts(order.toObject());
+    return this.withoutLegacyPaymentFields(order.toObject());
   }
 
   async remove(id: string) {
@@ -249,14 +215,10 @@ export class OrdersService {
     return this.mediaStorage.readMedia(orderId, fileName);
   }
 
-  private withFinancialAmounts<
-    T extends { totalAmount?: number; advancePaid?: number; paidAmount?: number },
-  >(order: T): T & { paidAmount: number; balanceAmount: number } {
-    const paidAmount = order.paidAmount ?? order.advancePaid ?? 0;
-    return {
-      ...order,
-      paidAmount,
-      balanceAmount: Math.max(0, (order.totalAmount ?? 0) - paidAmount),
-    };
+  private withoutLegacyPaymentFields<
+    T extends { advancePaid?: unknown; paidAmount?: unknown },
+  >(order: T) {
+    const { advancePaid: _advancePaid, paidAmount: _paidAmount, ...orderFields } = order;
+    return orderFields;
   }
 }

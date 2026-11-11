@@ -172,6 +172,9 @@ export class PaymentsService {
         result = undefined;
         const payment = await this.payments.findById(paymentObjectId).session(session).exec();
         if (!payment) throw new NotFoundException('Payment not found');
+        if (payment.invoiceId) {
+          throw new BadRequestException('Invoice payments cannot be allocated to orders');
+        }
 
         const previousRequest = payment.allocationRequests.find(
           (request) => request.idempotencyKey === dto.idempotencyKey,
@@ -459,11 +462,17 @@ export class PaymentsService {
   }
 
   private withUnallocated<
-    T extends { amount: number; allocations: readonly { amount: number }[] },
+    T extends {
+      amount: number;
+      allocations: readonly { amount: number }[];
+      invoiceId?: Types.ObjectId;
+    },
   >(payment: T): T & { unallocatedAmount: number } {
     return {
       ...payment,
-      unallocatedAmount: getUnallocatedAmount(payment.amount, payment.allocations),
+      unallocatedAmount: payment.invoiceId
+        ? 0
+        : getUnallocatedAmount(payment.amount, payment.allocations),
     };
   }
 

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import styles from './orders.module.css';
 import { API, apiFetch } from '../lib/api';
 import { NewOrderDialog } from '../components/new-order-dialog';
+import { Breadcrumbs } from '../components/breadcrumbs';
 
 const filters = [
   ['all', 'All orders'],
@@ -12,8 +13,6 @@ const filters = [
   ['due_today', 'Due today'],
   ['overdue', 'Overdue'],
   ['delivered', 'Delivered'],
-  ['payment_due', 'Payment due'],
-  ['received', 'Has payment'],
 ];
 
 type Order = {
@@ -22,7 +21,6 @@ type Order = {
   deliveryDate: string;
   status: string;
   totalAmount?: number;
-  advancePaid?: number;
   clientId: {
     name: string;
     phone: string;
@@ -184,8 +182,6 @@ export default function OrdersPage() {
 
       const rows = allOrders.map((order) => {
         const totalAmount = order.totalAmount ?? 0;
-        const collected = order.advancePaid ?? 0;
-        const due = Math.max(0, totalAmount - collected);
         return `<tr>
           <td>${escapeHtml(order.clientId?.name ?? 'Unknown client')}</td>
           <td>${escapeHtml(order.clientId?.phone ?? '')}</td>
@@ -193,8 +189,6 @@ export default function OrdersPage() {
           <td>${escapeHtml(formatDate(order.deliveryDate))}</td>
           <td>${escapeHtml(labelForStatus(order.status))}</td>
           <td>₹${totalAmount.toLocaleString('en-IN')}</td>
-          <td>₹${collected.toLocaleString('en-IN')}</td>
-          <td>₹${due.toLocaleString('en-IN')}</td>
         </tr>`;
       }).join('');
       const filterLabel = filters.find(([value]) => value === view)?.[1] ?? 'All orders';
@@ -230,7 +224,7 @@ export default function OrdersPage() {
             <h1>Hamiz Boutique — Orders</h1>
             <p class="meta">${escapeHtml(filterLabel)}${dateLabel ? ` · ${escapeHtml(dateLabel)}` : ''}${submittedSearch ? ` · Search: ${escapeHtml(submittedSearch)}` : ''} · ${allOrders.length} orders · Exported ${escapeHtml(new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date()))}</p>
             <table>
-              <thead><tr><th>Client</th><th>Phone</th><th>Garment</th><th>Delivery</th><th>Status</th><th>Billed</th><th>Collected</th><th>Due</th></tr></thead>
+              <thead><tr><th>Client</th><th>Phone</th><th>Garment</th><th>Delivery</th><th>Status</th><th>Order estimate</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
             <script>window.addEventListener('load', () => window.print());</script>
@@ -247,13 +241,10 @@ export default function OrdersPage() {
 
   return (
     <main className={styles.page}>
+      <Breadcrumbs items={[{ label: 'Dashboard', href: '/' }, { label: 'Orders' }]} />
       {/* Page Header */}
       <header className={styles.header}>
         <div>
-          <Link href="/" className={styles.backLink}>
-            <span>←</span> Dashboard
-          </Link>
-
           <p className={styles.eyebrow}>ORDER DIRECTORY</p>
           <h1>View orders</h1>
           <p className={styles.subtitle}>
@@ -366,7 +357,6 @@ export default function OrdersPage() {
         <div className={styles.listHeading}>
           <span>CLIENT & ORDER</span>
           <span>DELIVERY DATE</span>
-          <span>PAYMENT</span>
           <span>STATUS</span>
         </div>
 
@@ -391,12 +381,7 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className={styles.orderList}>
-            {orders.map((order) => {
-              const total = order.totalAmount ?? 0;
-              const received = order.advancePaid ?? 0;
-              const balance = Math.max(0, total - received);
-
-              return (
+            {orders.map((order) => (
                 <Link
                   href={`/orders/${order._id}`}
                   key={order._id}
@@ -431,31 +416,6 @@ export default function OrdersPage() {
                     </strong>
                   </div>
 
-                  {/* Payment */}
-                  <div className={styles.payment}>
-                    <span className={styles.mobileLabel}>
-                      Payment
-                    </span>
-
-                    <strong>
-                      ₹{received.toLocaleString('en-IN')}
-                    </strong>
-
-                    {total > 0 ? (
-                      <span>
-                        Total: ₹{total.toLocaleString('en-IN')}
-                      </span>
-                    ) : (
-                      <span>Amount not added</span>
-                    )}
-
-                    {balance > 0 && (
-                      <span className={styles.balance}>
-                        ₹{balance.toLocaleString('en-IN')} due
-                      </span>
-                    )}
-                  </div>
-
                   {/* Status */}
                   <div className={styles.statusColumn}>
                     <span className={styles.mobileLabel}>
@@ -471,8 +431,7 @@ export default function OrdersPage() {
                     </span>
                   </div>
                 </Link>
-              );
-            })}
+            ))}
           </div>
         )}
       </section>

@@ -245,7 +245,7 @@
 
 .listHeading {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(150px, 1fr) minmax(110px, 0.7fr);
+  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(110px, 0.7fr);
   gap: 20px;
   align-items: center;
   padding: 17px 24px;
@@ -262,7 +262,7 @@
 
 .orderRow {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(150px, 1fr) minmax(110px, 0.7fr);
+  grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.8fr) minmax(110px, 0.7fr);
   gap: 20px;
   align-items: center;
   padding: 20px 24px;
@@ -515,7 +515,7 @@
 @media (max-width: 900px) {
   .listHeading,
   .orderRow {
-    grid-template-columns: minmax(180px, 1.3fr) minmax(115px, 0.8fr) minmax(125px, 1fr) 100px;
+    grid-template-columns: minmax(180px, 1.3fr) minmax(115px, 0.8fr) 100px;
     gap: 12px;
     padding-left: 16px;
     padding-right: 16px;
@@ -593,7 +593,6 @@
   }
 
   .delivery,
-  .payment,
   .statusColumn {
     gap: 6px;
   }
@@ -608,10 +607,6 @@
 
   .delivery strong {
     font-size: 12px;
-  }
-
-  .payment strong {
-    font-size: 14px;
   }
 
   .statusColumn {

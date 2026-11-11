@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { CSSProperties, useCallback, useEffect, useState } from 'react';
 import { NewOrderDialog } from './components/new-order-dialog';
+import { Breadcrumbs } from './components/breadcrumbs';
 import { API, apiFetch } from './lib/api';
 import styles from './dashboard.module.css';
 
@@ -11,12 +12,12 @@ type Summary = {
   delivered: number;
   overdue: number;
   dueToday: number;
+  invoices: number;
   accounts: {
     billed: number;
     received: number;
     pending: number;
-    ordersWithPending: number;
-    unallocated: number;
+    invoicesWithPending: number;
   };
   expenses: { total: number };
   cashProfit: number;
@@ -50,6 +51,7 @@ export default function Home() {
           <div></div>
         </div>
       </header>
+      <Breadcrumbs items={[{ label: 'Dashboard' }]} />
       <section className="dashboard-intro">
         <h2>Hamiz Boutique</h2>
         <time dateTime={new Date().toISOString().slice(0, 10)}>
@@ -64,25 +66,25 @@ export default function Home() {
         <Metric label="Pending work" value={summary?.pending} tone="sand" href="/orders?view=pending" />
         <Metric label="Due today" value={summary?.dueToday} tone="rose" href="/orders?view=due_today" />
         <Metric label="Overdue" value={summary?.overdue} tone="red" href="/orders?view=overdue" />
+        <Metric label="Invoices" value={summary?.invoices} tone="sage" href="/invoices" />
         <Metric label="Delivered" value={summary?.delivered} tone="sage" href="/orders?view=delivered" />
       </section>
       <section className="accounts-section">
         <div className="section-heading">
           <div><p className="eyebrow">ACCOUNTS</p><h3>Money overview</h3></div>
-          <Link className="payment-dues-link" href="/orders?view=payment_due">
-            <span>View payment dues</span><span className="payment-dues-arrow" aria-hidden="true">→</span>
+          <Link className="payment-dues-link" href="/invoices">
+            <span>View invoices</span><span className="payment-dues-arrow" aria-hidden="true">→</span>
           </Link>
         </div>
         <div className={`metrics accounts-metrics ${styles.accountsMetrics}`}>
-          <MoneyMetric label="Total billed" value={summary?.accounts.billed} tone="sand" href="/orders" />
-          <MoneyMetric label="Amount received" value={summary?.accounts.received} tone="sage" href="/orders?view=received" />
+          <MoneyMetric label="Total invoiced" value={summary?.accounts.billed} tone="sand" href="/invoices" />
+          <MoneyMetric label="Paid on invoices" value={summary?.accounts.received} tone="sage" href="/invoices" />
           <MoneyMetric
-            label={`Payment pending${summary?.accounts.ordersWithPending ? ` · ${summary.accounts.ordersWithPending} orders` : ''}`}
+            label={`Invoice balance pending${summary?.accounts.invoicesWithPending ? ` · ${summary.accounts.invoicesWithPending} invoices` : ''}`}
             value={summary?.accounts.pending}
             tone="rose"
-            href="/orders?view=payment_due"
+            href="/invoices"
           />
-          <MoneyMetric label="Unallocated advance" value={summary?.accounts.unallocated} tone="sand" href="/clients" />
           <MoneyMetric label="Total expenses" value={summary?.expenses.total} tone="rose" href="/expenses" />
           <MoneyMetric label="Net cash profit · all time" value={summary?.cashProfit} tone="sand" href="/expenses" />
         </div>

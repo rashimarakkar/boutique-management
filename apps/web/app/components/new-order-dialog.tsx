@@ -9,7 +9,6 @@ type OrderDraft = {
   garmentType: string;
   deliveryDate: string;
   totalAmount: string;
-  allocation: string;
 };
 type NewOrderDialogProps = {
   label: string;
@@ -23,7 +22,6 @@ const blankOrder = (): OrderDraft => ({
   garmentType: '',
   deliveryDate: '',
   totalAmount: '',
-  allocation: '',
 });
 const blankClient = { name: '', phone: '' };
 
@@ -35,13 +33,11 @@ export function NewOrderDialog({
 }: NewOrderDialogProps) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<OrderDraft[]>([blankOrder()]);
-  const [advanceAmount, setAdvanceAmount] = useState('');
-  const [allocationMode, setAllocationMode] = useState<'automatic' | 'manual'>('automatic');
   const [newGarmentTypeIndex, setNewGarmentTypeIndex] = useState<number | null>(null);
   const [createdOrderIds, setCreatedOrderIds] = useState<Record<string, string>>({});
-  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState('');
   const [clientMode, setClientMode] = useState<'existing' | 'new'>('existing');
   const [clientQuery, setClientQuery] = useState('');
+  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [clientsLoading, setClientsLoading] = useState(true);
@@ -59,23 +55,14 @@ export function NewOrderDialog({
     : clients;
   const firstInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const clientTrigger = useRef<HTMLButtonElement>(null);
   const savingRef = useRef(saving);
   savingRef.current = saving;
   const orderTotal = orders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-  const advance = Number(advanceAmount) || 0;
-  const allocations = orders.map((order, index) => {
-    if (allocationMode === 'manual') return Number(order.allocation) || 0;
-    const preceding = orders.slice(0, index).reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
-    return Math.max(0, Math.min(Number(order.totalAmount) || 0, advance - preceding));
-  });
-  const allocatedAmount = allocations.reduce((sum, amount) => sum + amount, 0);
-  const unallocatedAmount = Math.max(0, advance - allocatedAmount);
-  const updateOrder = (index: number, patch: Partial<OrderDraft>) => {
-    setPaymentIdempotencyKey('');
+  const updateOrder = (index: number, patch: Partial<OrderDraft>) =>
     setOrders((current) => current.map((order, orderIndex) =>
       orderIndex === index ? { ...order, ...patch } : order,
     ));
-  };
 
   useEffect(() => {
     apiFetch(`${API}/orders/garment-types`, { cache: 'no-store' })
@@ -120,7 +107,8 @@ export function NewOrderDialog({
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    firstInput.current?.focus();
+    if (clientMode === 'existing') clientTrigger.current?.focus();
+    else firstInput.current?.focus();
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !savingRef.current) setOpen(false);
     };
@@ -130,17 +118,19 @@ export function NewOrderDialog({
       document.body.style.overflow = previousOverflow;
       trigger.current?.focus();
     };
-  }, [open]);
+  }, [open, clientMode]);
+
+  useEffect(() => {
+    if (clientDropdownOpen) firstInput.current?.focus();
+  }, [clientDropdownOpen]);
 
   const reset = () => {
     setOrders([blankOrder()]);
     setCreatedOrderIds({});
-    setPaymentIdempotencyKey('');
-    setAdvanceAmount('');
-    setAllocationMode('automatic');
     setNewGarmentTypeIndex(null);
     setClientMode('existing');
     setClientQuery('');
+    setClientDropdownOpen(false);
     setSelectedClientId('');
     setNewClient(blankClient);
     setAddingGarmentType(false);
@@ -193,22 +183,6 @@ export function NewOrderDialog({
     }
     if (orders.some((order) => !Number.isInteger(Number(order.totalAmount) || 0) || Number(order.totalAmount) < 0)) {
       setMessage('Order totals must be whole, non-negative amounts.');
-      return;
-    }
-    if (!Number.isInteger(advance) || advance < 0) {
-      setMessage('The advance must be a whole, non-negative amount.');
-      return;
-    }
-    if (allocations.some((amount) => !Number.isInteger(amount))) {
-      setMessage('Allocations must be whole amounts.');
-      return;
-    }
-    if (allocatedAmount > advance) {
-      setMessage('Total allocations cannot exceed the advance received.');
-      return;
-    }
-    if (allocations.some((amount, index) => amount > (Number(orders[index].totalAmount) || 0))) {
-      setMessage('An order allocation cannot exceed that order’s stitching total.');
       return;
     }
     setSaving(true);
@@ -267,7 +241,7 @@ export function NewOrderDialog({
               ? body.message
               : 'Could not save an order.';
           throw new Error(
-            `${details}${createdOrders.length ? ` ${createdOrders.length} order(s) were already created; no combined payment was recorded.` : ''}`,
+            `${details}${createdOrders.length ? ` ${createdOrders.length} order(s) were already created.` : ''}`,
           );
         }
         const savedOrder = (await orderResponse.json()) as { _id: string };
@@ -276,36 +250,9 @@ export function NewOrderDialog({
         createdOrders.push(savedOrder);
       }
 
-      if (advance > 0) {
-        const idempotencyKey = paymentIdempotencyKey || crypto.randomUUID();
-        setPaymentIdempotencyKey(idempotencyKey);
-        const paymentResponse = await apiFetch(`${API}/clients/${clientId}/payments`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: advance,
-            idempotencyKey,
-            allocations: createdOrders.flatMap((order, index) =>
-              allocations[index] > 0
-                ? [{ orderId: order._id, amount: allocations[index] }]
-                : [],
-            ),
-          }),
-        });
-        if (!paymentResponse.ok) {
-          const body = await paymentResponse.json().catch(() => null);
-          const details = Array.isArray(body?.message)
-            ? body.message.join(' ')
-            : typeof body?.message === 'string'
-              ? body.message
-              : 'Orders were created, but the combined advance could not be recorded.';
-          throw new Error(`${details} Please check the customer payment history before retrying.`);
-        }
-      }
-
       reset();
       setOpen(false);
-      setSuccess(`${createdOrders.length} order${createdOrders.length === 1 ? '' : 's'} created${advance > 0 ? ' and advance recorded' : ''}.`);
+      setSuccess(`${createdOrders.length} order${createdOrders.length === 1 ? '' : 's'} created.`);
       onCreated?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Something went wrong.');
@@ -328,7 +275,6 @@ export function NewOrderDialog({
           setSuccess('');
           setMessage('');
           if (initialClient) {
-            setPaymentIdempotencyKey('');
             setClientMode('existing');
             setClientQuery('');
             setSelectedClientId(initialClient._id);
@@ -367,46 +313,94 @@ export function NewOrderDialog({
 
             <form onSubmit={submit} className="new-order-form">
               <div className="client-mode">
-                <button type="button" className={clientMode === 'existing' ? 'selected' : ''} onClick={() => { setPaymentIdempotencyKey(''); setClientMode('existing'); setMessage(''); }}>
+                <button type="button" className={clientMode === 'existing' ? 'selected' : ''} onClick={() => { setClientMode('existing'); setClientDropdownOpen(false); setMessage(''); }}>
                   Existing client
                 </button>
-                <button type="button" className={clientMode === 'new' ? 'selected' : ''} onClick={() => { setPaymentIdempotencyKey(''); setClientMode('new'); setSelectedClientId(''); setMessage(''); }}>
+                <button type="button" className={clientMode === 'new' ? 'selected' : ''} onClick={() => { setClientMode('new'); setClientDropdownOpen(false); setSelectedClientId(''); setMessage(''); }}>
                   New client
                 </button>
               </div>
 
               {clientMode === 'existing' ? (
                 <>
-                  <label>
-                    Search clients
-                    <input
-                      ref={firstInput}
-                      value={clientQuery}
-                      onChange={(event) => {
-                        setClientQuery(event.target.value);
-                        setSelectedClientId('');
-                        setPaymentIdempotencyKey('');
+                  <div className="client-picker">
+                    <span className="client-picker-label" id="choose-client-label">Choose client</span>
+                    <button
+                      ref={clientTrigger}
+                      type="button"
+                      className="client-picker-trigger"
+                      aria-haspopup="listbox"
+                      aria-expanded={clientDropdownOpen}
+                      aria-required="true"
+                      aria-label={selectedClientId
+                        ? `Selected client: ${clientOptions.find((client) => client._id === selectedClientId)?.name ?? 'client'}. Change client`
+                        : 'Choose a client'}
+                      onClick={() => {
+                        setClientDropdownOpen((isOpen) => !isOpen);
+                        setMessage('');
                       }}
-                      placeholder="Filter by name or phone number"
-                    />
-                  </label>
-                  <label>
-                    Choose client
-                    <select
-                      value={selectedClientId}
-                      required
-                      onChange={(event) => { setSelectedClientId(event.target.value); setPaymentIdempotencyKey(''); }}
-                      disabled={clientsLoading || Boolean(clientError)}
                     >
-                      <option value="">
-                        {clientsLoading ? 'Loading clients…' : clientError ? 'Could not load clients' : clients.length ? 'Select a client' : 'No matching clients'}
-                      </option>
-                      {clientOptions.map((client) => (
-                        <option value={client._id} key={client._id}>{client.name} · {client.phone}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {clientError && <p className="new-order-error">{clientError}</p>}
+                      <span>
+                        {selectedClientId
+                          ? (() => {
+                            const selectedClient = clientOptions.find((client) => client._id === selectedClientId);
+                            return selectedClient ? `${selectedClient.name} · ${selectedClient.phone}` : 'Select a client';
+                          })()
+                          : 'Select a client'}
+                      </span>
+                      <span className="client-picker-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    {clientDropdownOpen && (
+                      <div className="client-picker-dropdown">
+                        <input
+                          ref={firstInput}
+                          value={clientQuery}
+                          onChange={(event) => {
+                            setClientQuery(event.target.value);
+                            setSelectedClientId('');
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              setClientDropdownOpen(false);
+                              clientTrigger.current?.focus();
+                            } else if (event.key === 'ArrowDown') {
+                              event.preventDefault();
+                              event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[role="option"]')?.focus();
+                            }
+                          }}
+                          placeholder="Search by name or phone"
+                          aria-label="Search clients by name or phone number"
+                          autoComplete="off"
+                        />
+                        <div className="client-picker-options" role="listbox" aria-label="Clients">
+                          {clientError ? (
+                            <p className="new-order-error" role="alert">{clientError}</p>
+                          ) : clientsLoading ? (
+                            <p>Loading clients…</p>
+                          ) : clientOptions.length === 0 ? (
+                            <p>No matching clients</p>
+                          ) : clientOptions.map((client) => (
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={selectedClientId === client._id}
+                              key={client._id}
+                              onClick={() => {
+                                setSelectedClientId(client._id);
+                                setClientQuery('');
+                                setClientDropdownOpen(false);
+                              }}
+                            >
+                              <strong>{client.name}</strong>
+                              <span>{client.phone}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {clientError && !clientDropdownOpen && <p className="new-order-error">{clientError}</p>}
                 </>
               ) : (
                 <>
@@ -438,14 +432,13 @@ export function NewOrderDialog({
               <section className="visit-orders" aria-label="Orders in this visit">
                 <div className="visit-orders-heading">
                   <div><h3>Stitching orders</h3><span>{orders.length} order{orders.length === 1 ? '' : 's'}</span></div>
-                  <button type="button" onClick={() => { setPaymentIdempotencyKey(''); setOrders((current) => [...current, blankOrder()]); }}>＋ Add order</button>
+                  <button type="button" onClick={() => setOrders((current) => [...current, blankOrder()])}>＋ Add order</button>
                 </div>
                 {orders.map((order, index) => (
                   <article className="visit-order" key={order.key}>
                     <div className="visit-order-heading">
                       <strong>Order {index + 1}</strong>
                       {orders.length > 1 && <button type="button" aria-label={`Remove order ${index + 1}`} onClick={() => {
-                        setPaymentIdempotencyKey('');
                         setOrders((current) => current.filter((_, itemIndex) => itemIndex !== index));
                         setAddingGarmentType(false);
                         setNewGarmentTypeIndex(null);
@@ -488,35 +481,14 @@ export function NewOrderDialog({
                 <div className="visit-total"><span>Total stitching amount</span><strong>₹{orderTotal.toLocaleString('en-IN')}</strong></div>
               </section>
 
-              <section className="visit-payment">
-                <h3>Combined advance</h3>
-                <label>Amount received (₹)<input type="number" min="0" step="1" value={advanceAmount} onChange={(event) => { setAdvanceAmount(event.target.value); setPaymentIdempotencyKey(''); }} placeholder="0" /></label>
-                <div className="allocation-mode">
-                  <button type="button" className={allocationMode === 'automatic' ? 'selected' : ''} onClick={() => { setAllocationMode('automatic'); setPaymentIdempotencyKey(''); }}>Allocate automatically</button>
-                  <button type="button" className={allocationMode === 'manual' ? 'selected' : ''} onClick={() => { setAllocationMode('manual'); setPaymentIdempotencyKey(''); }}>Allocate manually</button>
-                </div>
-                {orders.map((order, index) => (
-                  <div className="allocation-row" key={`allocation-${index}`}>
-                    <span>Order {index + 1} · {order.garmentType || 'Select garment'}</span>
-                    {allocationMode === 'manual'
-                      ? <input aria-label={`Allocation for order ${index + 1}`} type="number" min="0" step="1" max={order.totalAmount || 0} value={order.allocation} onChange={(event) => updateOrder(index, { allocation: event.target.value })} />
-                      : <strong>₹{allocations[index].toLocaleString('en-IN')}</strong>}
-                    <small>Balance after payment: ₹{Math.max(0, (Number(order.totalAmount) || 0) - allocations[index]).toLocaleString('en-IN')}</small>
-                  </div>
-                ))}
-                <div className="allocation-summary">
-                  <span>Allocated <strong>₹{allocatedAmount.toLocaleString('en-IN')}</strong></span>
-                  <span>Unallocated <strong>₹{unallocatedAmount.toLocaleString('en-IN')}</strong></span>
-                </div>
-                {allocatedAmount > advance && <p className="new-order-error" role="alert">Allocations cannot exceed the received amount.</p>}
-              </section>
+              <p className="new-order-hint">Payments are recorded on the client’s invoice after it is created.</p>
 
               {message && <p className="new-order-message" role="status">{message}</p>}
               <button
                 className="primary"
-                disabled={saving || addingGarmentType || orders.some((order) => !order.garmentType || !order.deliveryDate) || (clientMode === 'existing' && !selectedClientId) || allocatedAmount > advance}
+                disabled={saving || addingGarmentType || orders.some((order) => !order.garmentType || !order.deliveryDate) || (clientMode === 'existing' && !selectedClientId)}
               >
-                {saving ? 'Saving visit…' : `Create ${orders.length > 1 ? `${orders.length} orders` : 'order'}${advance > 0 ? ' & record advance' : ''}`}
+                {saving ? 'Saving visit…' : `Create ${orders.length > 1 ? `${orders.length} orders` : 'order'}`}
               </button>
             </form>
           </section>

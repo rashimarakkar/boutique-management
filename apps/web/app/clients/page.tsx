@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { NewOrderDialog } from '../components/new-order-dialog';
+import { Breadcrumbs } from '../components/breadcrumbs';
 import { API, apiFetch } from '../lib/api';
 import styles from './clients.module.css';
 
@@ -67,9 +68,9 @@ export default function ClientsPage() {
 
   return (
     <main className={styles.page}>
+      <Breadcrumbs items={[{ label: 'Dashboard', href: '/' }, { label: 'Clients' }]} />
       <header className={styles.header}>
         <div>
-          <Link href="/" className={styles.back}>← Dashboard</Link>
           <p className={styles.eyebrow}>CLIENT DIRECTORY</p>
           <h1>Clients</h1>
           <p className={styles.subtitle}>Find a client to view their orders and account summary.</p>
