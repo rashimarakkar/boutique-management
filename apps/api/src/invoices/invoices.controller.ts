@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { CreateInvoiceDto, ListInvoicesQueryDto, RecordInvoicePaymentDto } from './dto';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { CreateInvoiceDto, ListInvoicesQueryDto, RecordInvoicePaymentDto, UpdateInvoiceDto } from './dto';
 import { InvoicesService } from './invoices.service';
 
 @Controller('invoices')
@@ -24,6 +24,16 @@ export class InvoicesController {
   @Get(':id')
   findOne(@Param('id') id: string): ReturnType<InvoicesService['findOne']> {
     return this.invoicesService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateInvoiceDto) {
+    return this.invoicesService.update(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.invoicesService.remove(id);
   }
 
   @Patch(':id/send')

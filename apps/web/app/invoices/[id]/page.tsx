@@ -1,19 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import { Breadcrumbs } from '../../components/breadcrumbs';
+import { GarmentTypeInput } from '../../components/garment-type-input';
+import { useGarmentTypes } from '../../components/use-garment-types';
 import { API, apiFetch } from '../../lib/api';
 import styles from '../invoices.module.css';
 
 type InvoiceItem = {
+  orderId?: string;
   garmentType: string;
   description?: string;
   quantity: number;
   unitPrice: number;
   total: number;
+};
+
+type EditableInvoiceItem = {
+  orderId?: string;
+  garmentType: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
 };
 
 type Invoice = {
@@ -441,6 +452,7 @@ async function createPaymentReceiptPdf(invoice: ReceiptInvoice, payment: Invoice
 
 export default function InvoiceDetailsPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -457,6 +469,14 @@ export default function InvoiceDetailsPage() {
   const [receivedAt, setReceivedAt] = useState(new Date().toISOString().slice(0, 10));
   const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentRefreshVersion, setPaymentRefreshVersion] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editItems, setEditItems] = useState<EditableInvoiceItem[]>([]);
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const { garmentTypes, garmentTypesError } = useGarmentTypes(editing);
 
   useEffect(() => {
     let active = true;
@@ -556,6 +576,90 @@ export default function InvoiceDetailsPage() {
     '',
     'Thank you for shopping with Hamiz Boutique.',
   ].join('\n');
+
+  const startEditing = () => {
+    if (!invoice) return;
+    setEditItems(invoice.items.map((item) => ({
+      orderId: item.orderId,
+      garmentType: item.garmentType,
+      description: item.description ?? '',
+      quantity: String(item.quantity),
+      unitPrice: String(item.unitPrice),
+    })));
+    setEditDueDate(invoice.dueDate ? new Date(invoice.dueDate).toISOString().slice(0, 10) : '');
+    setEditNotes(invoice.notes ?? '');
+    setEditError('');
+    setEditing(true);
+  };
+
+  const updateEditItem = (index: number, patch: Partial<EditableInvoiceItem>) => {
+    setEditItems((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, ...patch } : item,
+    ));
+  };
+
+  const saveInvoiceEdits = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!invoice) return;
+    setSavingEdit(true);
+    setEditError('');
+    setActionError('');
+    setNotice('');
+    try {
+      const response = await apiFetch(`${API}/invoices/${invoice._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: editItems.map((item) => ({
+            ...(item.orderId ? { orderId: item.orderId } : {}),
+            garmentType: item.garmentType.trim(),
+            description: item.description.trim() || undefined,
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+          })),
+          dueDate: editDueDate || undefined,
+          notes: editNotes.trim() || undefined,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        const message = Array.isArray(body?.message)
+          ? body.message.join(' ')
+          : typeof body?.message === 'string'
+            ? body.message
+            : 'Invoice could not be updated.';
+        throw new Error(message);
+      }
+      const updated = (await response.json()) as Invoice;
+      setInvoice((current) => current ? { ...current, ...updated, clientId: current.clientId } : current);
+      setEditing(false);
+      setNotice('Invoice updated.');
+    } catch (cause) {
+      setEditError(cause instanceof Error ? cause.message : 'Invoice could not be updated.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteInvoice = async () => {
+    if (!invoice || !window.confirm(`Delete invoice ${invoice.invoiceNumber}? This cannot be undone. Invoices with recorded payments cannot be deleted.`)) {
+      return;
+    }
+    setDeleting(true);
+    setActionError('');
+    setNotice('');
+    try {
+      const response = await apiFetch(`${API}/invoices/${invoice._id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(typeof body?.message === 'string' ? body.message : 'Invoice could not be deleted.');
+      }
+      router.replace('/invoices');
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'Invoice could not be deleted.');
+      setDeleting(false);
+    }
+  };
 
   const shareOnWhatsApp = () => {
     if (!invoice) return;
@@ -708,6 +812,12 @@ export default function InvoiceDetailsPage() {
           </div>
         </div>
         <div className={styles.actionsWrap}>
+          <button type="button" className={styles.actionButton} onClick={startEditing} disabled={actionBusy || editing || savingEdit || deleting}>
+            Edit invoice
+          </button>
+          <button type="button" className={`${styles.actionButton} ${styles.deleteInvoiceButton}`} onClick={deleteInvoice} disabled={actionBusy || savingEdit || deleting}>
+            {deleting ? 'Deleting…' : 'Delete invoice'}
+          </button>
           {!invoice.sentAt && invoice.status !== 'paid' && (
             <button type="button" className={styles.actionButton} onClick={markAsSent} disabled={actionBusy}>
               {actionBusy ? 'Updating…' : 'Mark as sent'}
@@ -726,6 +836,80 @@ export default function InvoiceDetailsPage() {
       </header>
       {actionError && <p className={styles.formError} role="alert">{actionError}</p>}
       {notice && <p className={styles.successNotice} role="status">{notice}</p>}
+
+      {editing && (
+        <form className={styles.createForm} onSubmit={saveInvoiceEdits}>
+          <div className={styles.formHeading}>
+            <div>
+              <p className={styles.eyebrow}>Edit invoice</p>
+              <h2>Update invoice details</h2>
+            </div>
+            <strong>Invoice number and payment history stay unchanged</strong>
+          </div>
+          <div className={styles.itemHeading}>
+            <h3>Invoice items</h3>
+            <button type="button" className={styles.textButton} onClick={() => setEditItems((current) => [...current, { garmentType: '', description: '', quantity: '1', unitPrice: '' }])}>
+              + Add item
+            </button>
+          </div>
+          {garmentTypesError && <p className={styles.suggestionNotice} role="status">{garmentTypesError} You can still enter a custom type.</p>}
+          <div className={styles.draftItems}>
+            {editItems.map((item, index) => (
+              <div className={styles.draftItem} key={`${item.orderId ?? 'custom'}-${index}`}>
+                <GarmentTypeInput
+                  id={`edit-garment-type-${index}`}
+                  value={item.garmentType}
+                  options={garmentTypes}
+                  required
+                  minLength={2}
+                  maxLength={200}
+                  onChange={(value) => updateEditItem(index, { garmentType: value })}
+                />
+                <label className={styles.draftField}>
+                  Description
+                  <input className={styles.formInput} value={item.description} maxLength={500} onChange={(event) => updateEditItem(index, { description: event.target.value })} placeholder="Optional" />
+                </label>
+                <label className={styles.draftField}>
+                  Quantity
+                  <input className={styles.formInput} type="number" min="1" step="1" required value={item.quantity} onChange={(event) => updateEditItem(index, { quantity: event.target.value })} />
+                </label>
+                <label className={styles.draftField}>
+                  Unit price (₹)
+                  <input className={styles.formInput} type="number" min="0" step="1" required value={item.unitPrice} onChange={(event) => updateEditItem(index, { unitPrice: event.target.value })} />
+                </label>
+                <strong className={styles.lineTotal}>{money((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong>
+                {editItems.length > 1 && (
+                  <button type="button" className={styles.removeItem} aria-label={`Remove item ${index + 1}`} onClick={() => setEditItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className={styles.invoiceFormExtras}>
+            <label className={styles.draftField}>
+              Due date
+              <input className={styles.formInput} type="date" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} />
+            </label>
+            <label className={styles.draftField}>
+              Notes
+              <input className={styles.formInput} value={editNotes} maxLength={1000} onChange={(event) => setEditNotes(event.target.value)} placeholder="Optional notes" />
+            </label>
+            <div className={styles.draftTotal}>
+              <span>Updated invoice total</span>
+              <strong>{money(editItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0))}</strong>
+            </div>
+          </div>
+          {editError && <p className={styles.formError} role="alert">{editError}</p>}
+          <p className={styles.formHint}>The updated invoice total must be at least {money(invoice.paidAmount)} already paid.</p>
+          <div className={styles.formActions}>
+            <button type="button" className={styles.cancelButton} disabled={savingEdit} onClick={() => { setEditing(false); setEditError(''); }}>Cancel</button>
+            <button type="submit" className={styles.createButton} disabled={savingEdit}>
+              {savingEdit ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      )}
 
       <section className={styles.invoiceCard}>
         <div className={styles.companyBlock}>

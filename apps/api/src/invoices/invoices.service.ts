@@ -5,7 +5,7 @@ import { Client, ClientDocument } from '../clients/client.schema';
 import { Order, OrderDocument } from '../orders/order.schema';
 import { CustomerPayment, PaymentDocument, PaymentMethod } from '../payments/payment.schema';
 import { paymentFingerprint } from '../payments/payment.utils';
-import { CreateInvoiceDto, InvoiceItemDto, ListInvoicesQueryDto, RecordInvoicePaymentDto } from './dto';
+import { CreateInvoiceDto, InvoiceItemDto, ListInvoicesQueryDto, RecordInvoicePaymentDto, UpdateInvoiceDto } from './dto';
 import { InvoiceCounter, InvoiceCounterDocument } from './invoice-counter.schema';
 import { Invoice, InvoiceDocument, InvoiceStatus } from './invoice.schema';
 
@@ -194,6 +194,86 @@ export class InvoicesService {
     }
 
     return { ...invoice, status: this.getStatus(invoice) };
+  }
+
+  async update(invoiceId: string, dto: UpdateInvoiceDto) {
+    const session = await this.connection.startSession();
+    let updatedInvoice: InvoiceDocument | undefined;
+    try {
+      await session.withTransaction(async () => {
+        const invoice = await this.invoiceModel.findById(invoiceId).session(session).exec();
+        if (!invoice) throw new NotFoundException('Invoice not found');
+
+        const linkedOrderIds = dto.items.flatMap((item) => item.orderId ? [item.orderId] : []);
+        const uniqueOrderIds = [...new Set(linkedOrderIds)];
+        if (uniqueOrderIds.length !== linkedOrderIds.length) {
+          throw new BadRequestException('An order can only appear once on an invoice.');
+        }
+
+        if (uniqueOrderIds.length > 0) {
+          const client = await this.clientModel.findById(invoice.clientId).session(session).lean();
+          if (!client) throw new NotFoundException('Client not found');
+          const orderIds = uniqueOrderIds.map((id) => new Types.ObjectId(id));
+          const clientOrders = await this.orderModel.collection.countDocuments({
+            _id: { $in: orderIds },
+            clientId: { $in: [client._id, client._id.toString()] },
+          }, { session });
+          if (clientOrders !== uniqueOrderIds.length) {
+            throw new BadRequestException('Invoice orders must belong to the selected client.');
+          }
+          const existingInvoice = await this.invoiceModel.exists({
+            _id: { $ne: invoice._id },
+            'items.orderId': { $in: orderIds },
+          }).session(session);
+          if (existingInvoice) {
+            throw new ConflictException('An order can only be billed once. Record additional payments on its existing invoice.');
+          }
+        }
+
+        const totals = this.buildTotals(dto.items);
+        if (totals.total < invoice.paidAmount) {
+          throw new BadRequestException('Invoice total cannot be less than the amount already paid.');
+        }
+        invoice.items = dto.items.map((item) => ({
+          orderId: item.orderId ? new Types.ObjectId(item.orderId) : undefined,
+          garmentType: item.garmentType.trim(),
+          description: item.description?.trim(),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.quantity * item.unitPrice,
+        }));
+        invoice.subtotal = totals.subtotal;
+        invoice.total = totals.total;
+        invoice.balanceAmount = totals.total - invoice.paidAmount;
+        invoice.dueDate = dto.dueDate ? new Date(dto.dueDate) : undefined;
+        invoice.notes = dto.notes?.trim() || undefined;
+        invoice.status = this.getStatus(invoice);
+        await invoice.save({ session });
+        updatedInvoice = invoice;
+      });
+    } finally {
+      await session.endSession();
+    }
+    if (!updatedInvoice) throw new ConflictException('Invoice could not be updated');
+    return updatedInvoice.toObject();
+  }
+
+  async remove(invoiceId: string) {
+    const session = await this.connection.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const invoice = await this.invoiceModel.findById(invoiceId).select('_id paidAmount').session(session).lean();
+        if (!invoice) throw new NotFoundException('Invoice not found');
+        const hasPayments = await this.paymentModel.exists({ invoiceId: invoice._id }).session(session);
+        if (hasPayments || invoice.paidAmount > 0) {
+          throw new ConflictException('This invoice has payment history and cannot be deleted.');
+        }
+        await this.invoiceModel.deleteOne({ _id: invoice._id }).session(session).exec();
+      });
+    } finally {
+      await session.endSession();
+    }
+    return { deleted: true };
   }
 
   async markSent(invoiceId: string) {

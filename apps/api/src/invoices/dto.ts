@@ -61,6 +61,23 @@ export class CreateInvoiceDto {
   notes?: string;
 }
 
+export class UpdateInvoiceDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => InvoiceItemDto)
+  items!: InvoiceItemDto[];
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}
+
 export class ListInvoicesQueryDto {
   @IsOptional()
   @Type(() => Number)

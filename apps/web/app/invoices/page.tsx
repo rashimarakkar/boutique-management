@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { API, apiFetch } from '../lib/api';
 import { Breadcrumbs } from '../components/breadcrumbs';
+import { GarmentTypeInput } from '../components/garment-type-input';
+import { useGarmentTypes } from '../components/use-garment-types';
 import styles from './invoices.module.css';
 
 type Client = {
@@ -121,6 +123,7 @@ export default function InvoicesPage() {
   const [items, setItems] = useState<InvoiceDraftItem[]>([blankItem()]);
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
+  const { garmentTypes, garmentTypesError } = useGarmentTypes(creating);
 
   useEffect(() => {
     let active = true;
@@ -515,13 +518,18 @@ export default function InvoicesPage() {
                 <h3>Invoice items</h3>
                 <button type="button" className={styles.textButton} onClick={() => setItems((current) => [...current, blankItem()])}>+ Add custom item</button>
               </div>
+              {garmentTypesError && <p className={styles.suggestionNotice} role="status">{garmentTypesError} You can still enter a custom type.</p>}
               <div className={styles.draftItems}>
                 {items.map((item, index) => (
                   <div className={styles.draftItem} key={`${item.orderId ?? 'custom'}-${index}`}>
-                    <label className={styles.draftField}>
-                      Item / garment
-                      <input className={styles.formInput} value={item.garmentType} required onChange={(event) => updateItem(index, { garmentType: event.target.value })} placeholder="e.g. Designer blouse" />
-                    </label>
+                    <GarmentTypeInput
+                      id={`invoice-garment-type-${index}`}
+                      value={item.garmentType}
+                      options={garmentTypes}
+                      required
+                      placeholder="e.g. Designer blouse"
+                      onChange={(value) => updateItem(index, { garmentType: value })}
+                    />
                     <label className={styles.draftField}>
                       Description
                       <input className={styles.formInput} value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} placeholder="Optional details" />
