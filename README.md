@@ -54,3 +54,9 @@ Create and view multi-item client invoices from **Invoices** in the web app. Inv
 Invoices begin as drafts. Mark an invoice as sent after sharing it; recording a full or partial receipt updates its status to paid or partial, and unpaid sent invoices past their due date display as overdue. Record invoice receipts at `POST /api/invoices/:id/payments`; these update the invoice balance and are stored in the customer's payment history. The dashboard and client account summarize billed, paid, and due amounts from invoices.
 
 The invoice detail page generates a branded PDF. On devices that support sharing files, **Share PDF on WhatsApp** opens the system share sheet with the PDF attached. Otherwise, it downloads the PDF and opens WhatsApp with a message; attach the downloaded PDF manually before sending. WhatsApp's `wa.me` web link cannot attach documents itself.
+
+## Install as an app
+
+The web app is installable as a Progressive Web App (PWA) on supported browsers. Deploy it over HTTPS, open the site in the browser, then choose **Install app** or **Add to Home Screen** from the browser menu. On iOS, use Safari's **Share → Add to Home Screen**.
+
+The service worker caches only static application assets and an offline notice. It does not cache API responses, authenticated pages, or client, order, invoice, payment, and expense data. An internet connection and a valid sign-in session are still required to use the workspace.

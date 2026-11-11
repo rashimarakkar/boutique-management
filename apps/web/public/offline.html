@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#343930">
+    <title>Offline | Hamiz Boutique</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        padding: 24px;
+        place-items: center;
+        background: #f8f6f1;
+        color: #343930;
+        font: 16px/1.6 system-ui, sans-serif;
+      }
+      main {
+        width: min(100%, 440px);
+        padding: 36px;
+        border: 1px solid #e8dfd3;
+        border-radius: 18px;
+        background: #fffdfa;
+        text-align: center;
+        box-shadow: 0 16px 48px rgb(52 57 48 / 9%);
+      }
+      img { width: 150px; height: auto; margin-bottom: 20px; }
+      h1 { margin: 0 0 8px; font-size: 1.5rem; }
+      p { margin: 0; color: #69675e; }
+      button {
+        margin-top: 24px;
+        padding: 11px 20px;
+        border: 0;
+        border-radius: 8px;
+        background: #343930;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/hamiz-logo.png" alt="Hamiz Boutique">
+      <h1>You’re offline</h1>
+      <p>Reconnect to the internet to securely access your boutique workspace. Client and business data is not stored for offline use.</p>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
